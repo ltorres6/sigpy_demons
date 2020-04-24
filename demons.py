@@ -410,7 +410,9 @@ def run(
                     V[2] = sp.resize(convolveFFT(V[2], filtFluid), oshapeCurrent)
                 V *= 0.5
 
-                loss.append(energy(IsCurrent - ImCurrent, V, stepSize))
+                E_p = energy(IsCurrent - ImCurrent, T, stepSize)
+                E_c = energy(IsCurrent - ImCurrent, V, stepSize)
+                loss.append(1 - (E_p - E_c) / E_p)
                 # ----------------
                 # show(V, "V (Smoothed)")
                 # ----------------
@@ -446,7 +448,7 @@ def run(
 
         # ----------------
         # show(corrV, "corrV")
-        show(finalV, "finalV (Upsampled)")
+        # show(finalV, "finalV (Upsampled)")
         # -----------------
 
     # crop to original dimensions
@@ -464,8 +466,8 @@ def run(
         else:
             ImWarped = imwarp(Im, finalV)
             # show(finalV * -1 * finalV, "Tinv*T (not diffeo)")
-        show(Is - Im, "Not Registered")
-        show(Is - ImWarped, "Registered")
+        show(100 * convolveFFT(xp.abs((Is - Im)) / Is, filtDiff), "Not Registered")
+        show(100 * xp.abs((Is - ImWarped)) / Is, "Registered")
         show(ImWarped, "Warped Image", "gray")
         return finalV, ImWarped
     else:
