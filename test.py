@@ -11,7 +11,7 @@ timeI = time.time()
 Is = nib.load("/home/ltorres/data/imoco/103-005/mri/20160114/expi.nii.gz").get_fdata()
 Im = nib.load("/home/ltorres/data/imoco/103-005/mri/20160114/insp.nii.gz").get_fdata()
 # plt.ImagePlot(Is)
-ImWarped, velocityField = Demons(Is, Im, nLevels=4, device=0).run()
+ImWarped, velocityField = Demons(Is, Im, nLevels=4, sigmas=2.0, device=device).run()
 timeF = time.time() - timeI
 print("Runtime: {} seconds.".format(timeF))
 

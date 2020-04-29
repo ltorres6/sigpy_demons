@@ -3,13 +3,15 @@ import sigpy as sp
 import sigpy.plot as plt
 from tqdm.auto import tqdm
 from normalize import normalize
-
-# import numpy as np
-# from scipy.fft import next_fast_len
+import convolutions as conv
+import filters
+from imwarp import imwarp
+from resample import zoom
+from scipy.fft import next_fast_len
 
 
 class Demons:
-    def __init__(self, Is, Im, nLevels=4, sigma=1.0, device=0):
+    def __init__(self, Is, Im, nLevels=4, sigmas=1.0, device=-1):
         # Get corresponding matrix math module
         self.device = device
         self.xp = sp.Device(device).xp
@@ -24,7 +26,8 @@ class Demons:
 
         self.nLevels = nLevels
         self.scales = [2 ** (self.nLevels - l - 1) for l in range(self.nLevels)]
-        self.iterations = list(int(30 + 30 * ii * 3) for ii in range(nLevels))
+        # self.iterations = list(int(30 + 30 * ii * 3) for ii in range(nLevels, 0, -1))
+        self.iterations = list(int(200 // 2 ** ii) for ii in range(nLevels))
         self.originalShape = Is.shape
         self.paddedShape = self.calcPad(self.originalShape, self.nLevels, 5)
         self.Is = sp.resize(Is, self.paddedShape)
@@ -44,7 +47,7 @@ class Demons:
         # Thresholds for numerical stability (only works for images with similar intensity.)
         self.IntensityDifferenceThreshold = 0.001
         self.DenominatorThreshold = 1e-9
-        self.sigmaDiff = sigma
+        self.sigmaDiff = sigmas
 
     def normalize(I_in, minv, maxv, device):
         xp = sp.Device(device)
@@ -61,7 +64,7 @@ class Demons:
 
     def findUpdateField(self):
         # Warp image
-        ImWarped = self.imwarp(self.ImCurrent, self.corrV)
+        ImWarped = imwarp(self.ImCurrent, self.corrV, device=self.device)
         Idiff = self.IsCurrent - ImWarped
         Denominator = self.dSMag + Idiff ** 2 / self.sigma_x ** 2
         cfactor = Idiff / Denominator
@@ -78,137 +81,13 @@ class Demons:
         V[mask] = 0.0
         return V
 
-    def imwarp(self, I_in, T):
-        # This function warps I_in to coordinates defined by coord + T
-        # Interpolate using sigpy. param = 1 is linear.
-        nx, ny, nz = I_in.shape
-        coord = self.xp.mgrid[0:nx, 0:ny, 0:nz].astype("f")
-        I_out = sp.interpolate(
-            I_in,
-            self.xp.moveaxis(coord, 0, -1) + self.xp.moveaxis(T, 0, -1),
-            kernel="spline",
-            width=2,
-            param=1,
-        )
-        return I_out
-
-    def gaussianKernel1d(self, sigma=1.0):
-        # Generates Gaussian Kernel. Kernel truncated at 4 * sigma
-        # Round to next odd integer
-        N = 4 * sigma
-        N = self.xp.ceil(N) // 2 * 2 + 1
-        if N < 3.0:
-            N = 3.0
-        # print(N)
-        x = self.xp.linspace(0, N - 1, int(N))
-        alpha = 0.5 * (N - 1) / sigma
-        k1d = self.xp.exp(-0.5 * (alpha * (x - (N - 1) / 2) / ((N - 1) / 2)) ** 2)
-        return k1d
-
-    def gaussianKernel3d(self, sigma=1.0):
-        if self.xp.array(sigma).size == 1:
-            k1d = self.gaussianKernel1d(sigma)
-            k3dx, k3dy, k3dz = self.xp.ix_(k1d, k1d, k1d)
-            k3d = k3dx * k3dy * k3dz
-        else:
-            k1d = self.gaussianKernel1d(sigma[0])
-            k2d = self.gaussianKernel1d(sigma[1])
-            k3d = self.gaussianKernel1d(sigma[2])
-            k3dx, k3dy, k3dz = self.xp.ix_(k1d, k2d, k3d)
-            k3d = k3dx * k3dy * k3dz
-        # Normalize (Unless 1D already normalized)
-        k3d = k3d / self.xp.sum(k3d)
-        return k3d
-
-    def gaussianPyramid(self, I, n):
-        """
-        Use gaussian pyramid to downsample image by n levels
-        Should be faster than going straight to downsample factor
-        because we keep convolution kernel small.
-        """
-        ishape = I.shape
-        if n == 0:
-            return I
-        # loop through scales
-        for ii in range(n):
-            oshape = tuple(int(jj // (2 ** ii)) for jj in ishape)
-            k1d = self.xp.array([1, 4, 6, 4, 1]) / 16  # sigma ~1.0
-            k3dx, k3dy, k3dz = self.xp.ix_(k1d, k1d, k1d)
-            k3d = k3dx * k3dy * k3dz
-            out = sp.convolve(I, k3d)
-            out = sp.convolve(out, k3d)  # Convolve twice
-            out = sp.resize(out, oshape)
-            out = sp.downsample(out, (2,) * I.ndim)
-            # Set I for next level
-            I = out
-
-        return out
-
-    def gaussianPyramidUp(self, I, n):
-        """
-        Use gaussian pyramid to downsample image by n levels
-        Should be faster than going straight to downsample factor
-        because we keep convolution kernel small.
-        """
-        ishape = I.shape
-        if n == 0:
-            return I
-        # loop through scales
-        for ii in range(n):
-            oshape = tuple(int(jj * (2 ** (ii + 1))) for jj in ishape)
-            print(ishape)
-            print(oshape)
-
-            k1d = self.xp.array([1, 4, 6, 4, 1]) / 16  # sigma ~1.0
-            k3dx, k3dy, k3dz = self.xp.ix_(k1d, k1d, k1d)
-            k3d = k3dx * k3dy * k3dz
-            out = sp.upsample(I, oshape, (1.5,) * I.ndim)
-            out = sp.convolve(out, k3d)
-            out = sp.convolve(out, k3d)
-            out = sp.resize(out, oshape) * 4
-            # Set I for next level
-            I = out
-
-        return out
-
-    def convolveFFT(self, I1, I2):
-        # FFT convolution O(NlogN) Should pad with symetric image for proper periodic convolution
-        oshape = I1.shape
-        I1 = sp.fft(I1, norm=None)
-        I1 = self.xp.vstack(
-            (I1, self.xp.flip(self.xp.flip(self.xp.flip(I1, axis=0), axis=1), axis=2))
-        )
-        I2 = sp.fft(I2, oshape=I1.shape, norm=None)
-        # I2 = sp.resize(I2, I1.shape)
-        out = sp.ifft(I1 * I2, oshape=oshape, norm=None)
-        out = self.xp.real(out)
-        return out
-
-    # def downsample(I, oshape, device):
-    #     # Filter then decimate (can do in either frequency domain or spatial)
-    #     xp = sp.Device(device).xp
-    #     zFactor = I.shape[0] / oshape[0]
-    #     # zFactor might need a factor of 2 somewhere in filterSize
-    #     filterSize = [int(round(i / (2 * zFactor))) for i in (I.shape)]
+    # def upsample(self, I, oshape, device):
+    #     # Upsampling via FFT zeropadding (upsample and low pass).
+    #     zFactor = oshape[0] / I.shape[0]
     #     out = sp.fft(I, norm=None)
-    #     W = sp.hanning(filterSize, device=device)
-    #     out *= sp.resize(W, out.shape)
     #     out = sp.resize(out, oshape)
-    #     out = xp.abs(sp.ifft(out, norm=None))
-    #     # plt.ImagePlot(I)
-    #     # plt.ImagePlot(out)
-    #     # deblur?
-    #     # filt_inv = gaussianKernel3d(5, 0.3, inverse="True")
-    #     # imgOut = sp.resize(sp.conv.convolve(imgOut, filt_inv), imgOut.shape)
+    #     out = self.xp.real(sp.ifft(out, norm=None) * zFactor)
     #     return out
-
-    def upsample(self, I, oshape, device):
-        # Upsampling via FFT zeropadding (upsample and low pass).
-        zFactor = oshape[0] / I.shape[0]
-        out = sp.fft(I, norm=None)
-        out = sp.resize(out, oshape)
-        out = self.xp.real(sp.ifft(out, norm=None) * zFactor)
-        return out
 
     # def energy(I1, I2, sigma_x):
     #     # E_corr s_opt
@@ -234,16 +113,32 @@ class Demons:
             sigmaDiff = self.sigmaDiff
             oshapeCurrent = self.oshapes[l]
 
-            self.IsCurrent = self.gaussianPyramid(self.Is, self.nLevels - l - 1)
-            self.ImCurrent = self.gaussianPyramid(self.Im, self.nLevels - l - 1)
-
+            # self.IsCurrent = self.gaussianPyramid(self.Is, self.nLevels - l - 1)
+            # self.ImCurrent = self.gaussianPyramid(self.Im, self.nLevels - l - 1)
+            # plt.ImagePlot(self.Is)
+            self.IsCurrent = zoom(self.Is, 2 ** -(self.nLevels - l - 1), device=self.device)
+            self.ImCurrent = zoom(self.Im, 2 ** -(self.nLevels - l - 1), device=self.device)
+            # plt.ImagePlot(self.IsCurrent)
             self.dS = self.fd[l] * self.IsCurrent
+            # plt.ImagePlot(self.dS)
+
             self.corrV = self.xp.zeros((3,) + oshapeCurrent)
-            self.corrV[0] = self.gaussianPyramid(self.finalV[0], self.nLevels - l - 1)
-            self.corrV[1] = self.gaussianPyramid(self.finalV[1], self.nLevels - l - 1)
-            self.corrV[2] = self.gaussianPyramid(self.finalV[2], self.nLevels - l - 1)
+            # self.corrV[0] = self.gaussianPyramid(self.finalV[0], self.nLevels - l - 1)
+            # self.corrV[1] = self.gaussianPyramid(self.finalV[1], self.nLevels - l - 1)
+            # self.corrV[2] = self.gaussianPyramid(self.finalV[2], self.nLevels - l - 1)
+            self.corrV[0] = zoom(self.finalV[0], 2 ** -(self.nLevels - l - 1), device=self.device)
+            self.corrV[1] = zoom(self.finalV[1], 2 ** -(self.nLevels - l - 1), device=self.device)
+            self.corrV[2] = zoom(self.finalV[2], 2 ** -(self.nLevels - l - 1), device=self.device)
             self.dSMag = self.dS[0] ** 2 + self.dS[1] ** 2 + self.dS[2] ** 2
-            self.filtDiff = self.gaussianKernel3d(sigmaDiff)
+            # plt.ImagePlot(self.dSMag)
+
+            # Generate Gaussian filter in Fourier Space with optimal fft sizes
+            self.filtDiff = filters.gaussianKernel3d(sigmaDiff, device=self.device)
+            self.fftsize = tuple(self.filtDiff.shape[0] + i - 1 for i in oshapeCurrent)
+            self.fftsize = tuple(next_fast_len(i) for i in self.fftsize)
+            self.filtDiff = sp.fft(self.filtDiff, oshape=self.fftsize, norm=None)
+            # plt.ImagePlot(self.filtDiff)
+
             # Iterate
             # Progress Bar
             print("Current Image Shape: {} ...".format(oshapeCurrent))
@@ -254,45 +149,40 @@ class Demons:
                 for ll in range(iterCurrent):
                     # Update Velocity Field
                     self.corrV += self.findUpdateField()
-                    # Regularization
-                    self.corrV[0] = sp.resize(
-                        sp.convolve(self.corrV[0], self.filtDiff), oshapeCurrent
+                    # Convolve (Diffusion Regularize)
+                    self.corrV[0] = self.xp.real(
+                        conv.FFTConvolve(
+                            self.filtDiff, self.corrV[0], shape=self.fftsize, device=self.device
+                        )
                     )
-                    self.corrV[1] = sp.resize(
-                        sp.convolve(self.corrV[1], self.filtDiff), oshapeCurrent
+                    self.corrV[1] = self.xp.real(
+                        conv.FFTConvolve(
+                            self.filtDiff, self.corrV[1], shape=self.fftsize, device=self.device
+                        )
                     )
-                    self.corrV[2] = sp.resize(
-                        sp.convolve(self.corrV[2], self.filtDiff), oshapeCurrent
+                    self.corrV[2] = self.xp.real(
+                        conv.FFTConvolve(
+                            self.filtDiff, self.corrV[2], shape=self.fftsize, device=self.device
+                        )
                     )
-
-                    # # Regularization
-                    # self.corrV[0] = sp.resize(
-                    #     self.convolveFFT(self.corrV[0], self.filtDiff), oshapeCurrent
-                    # )
-                    # self.corrV[1] = sp.resize(
-                    #     self.convolveFFT(self.corrV[1], self.filtDiff), oshapeCurrent
-                    # )
-                    # self.corrV[2] = sp.resize(
-                    #     self.convolveFFT(self.corrV[2], self.filtDiff), oshapeCurrent
-                    # )
                     pbar.update()
 
             # # Upsample corrV and save as finalV (Should I upsample all the way each time or move up the pyramid?)
-            self.finalV[0] = self.upsample(self.corrV[0], self.paddedShape, self.device)
-            self.finalV[1] = self.upsample(self.corrV[1], self.paddedShape, self.device)
-            self.finalV[2] = self.upsample(self.corrV[2], self.paddedShape, self.device)
-            # self.finalV[0] = self.gaussianPyramidUp(self.corrV[0], self.nLevels - l - 1)
-            # self.finalV[0] = self.gaussianPyramidUp(self.corrV[1], self.nLevels - l - 1)
-            # self.finalV[0] = self.gaussianPyramidUp(self.corrV[2], self.nLevels - l - 1)
+            self.finalV[0] = zoom(self.corrV[0], 2 ** (self.nLevels - l - 1), device=self.device)
+            self.finalV[1] = zoom(self.corrV[1], 2 ** (self.nLevels - l - 1), device=self.device)
+            self.finalV[2] = zoom(self.corrV[2], 2 ** (self.nLevels - l - 1), device=self.device)
             # ----------------
-            plt.ImagePlot(self.corrV, title="Update")
-            plt.ImagePlot(self.finalV, title="finalV (Upsampled)")
+            # plt.ImagePlot(self.corrV, title="Update")
+            # plt.ImagePlot(self.finalV, title="finalV (Upsampled)")
             # -----------------
 
         # crop to original dimensions
         self.finalV = sp.resize(self.finalV, ((3,) + self.originalShape))
         self.Is = sp.resize(self.Is, self.originalShape)
         self.Im = sp.resize(self.Im, self.originalShape)
-        # np = sp.Device(-1).xp
-        ImWarped = self.imwarp(self.Im, self.finalV)
+        ImWarped = imwarp(self.Im, self.finalV, device=self.device)
+        # plt.ImagePlot(ImWarped, title="Final Warped Image")
+        # plt.ImagePlot(self.finalV, title="Final Warp")
+        # plt.ImagePlot((self.Is - self.Im) / self.Is, title="Original Difference")
+        # plt.ImagePlot((self.Is - ImWarped) / self.Is, title="Registered Difference")
         return ImWarped, self.finalV

@@ -1,1 +1,7 @@
 __pycache__/
+test_boxFilt.py
+test.py
+testoaconvolve.py
+testoaconvolve1d.py
+testResize.py
+toeplitzConvolve.py
