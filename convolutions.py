@@ -38,9 +38,7 @@ def oaconvolve(filt, arrIn, batchSize=None, device=-1):
     L_S = L_F - L_I + 1
     L_sig = arrIn.shape[0]
     offsets = range(0, L_sig, L_S)
-    # print(L_F)
-    # print(L_S)
-    # print(offsets)
+
     # handle complex or real input
     if xp.iscomplexobj(filt) or xp.iscomplexobj(arrIn):
         fft_func = xp.fft.fft
@@ -53,10 +51,9 @@ def oaconvolve(filt, arrIn, batchSize=None, device=-1):
 
     FDir = fft_func(filt, n=L_F)
 
-    # overlap and add
+    # overlap add
     for n in offsets:
         res[n : n + L_F] += ifft_func(fft_func(arrIn[n : n + L_S], n=L_F) * FDir)
-    # print(res.shape)
     if batchSize is not None:
         res[: batchSize.shape[0]] = res[: batchSize.shape[0]] + batchSize
         return res[:L_sig], res[L_sig:]

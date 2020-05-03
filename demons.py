@@ -1,17 +1,36 @@
 import sigpy as sp
-
-import sigpy.plot as plt
 from tqdm.auto import tqdm
 from normalize import normalize
 import convolutions as conv
 import filters
+import finiteDifferences as fd
 from imwarp import imwarp
 from resample import zoom
 from scipy.fft import next_fast_len
+import energy
+import sigpy.plot as plt
+import numpy as np
+from scipy.ndimage import median_filter
+from demonsUpdate import demonsUpdate as update
+import diffeomorphism
 
 
 class Demons:
-    def __init__(self, Is, Im, nLevels=4, sigmas=1.0, device=-1):
+    def __init__(
+        self,
+        Is,
+        Im,
+        nLevels=4,
+        diffusionSigmas=1.0,
+        fluidSigmas=1.0,
+        max_iter=100,
+        alpha=2.5,
+        cThresh=1e-6,
+        variant="passive",
+        diffeomorphic=False,
+        compositionType="A",
+        device=-1,
+    ):
         # Get corresponding matrix math module
         self.device = device
         self.xp = sp.Device(device).xp
@@ -21,38 +40,36 @@ class Demons:
         Im = sp.to_device(Im, device)
 
         # Normalize. Important for numerical stability
-        Is = normalize(Is, 0, 255, device)
-        Im = normalize(Im, 0, 255, device)
-
+        # self.maxval = 1.0
+        # Is = normalize(Is, 0.0, self.maxval, device)
+        # Im = normalize(Im, 0.0, self.maxval, device)
+        Is = Is / Im.max()
+        Im = Im / Im.max()
+        # plt.ImagePlot(Is)
         self.nLevels = nLevels
-        self.scales = [2 ** (self.nLevels - l - 1) for l in range(self.nLevels)]
-        # self.iterations = list(int(30 + 30 * ii * 3) for ii in range(nLevels, 0, -1))
-        self.iterations = list(int(200 // 2 ** ii) for ii in range(nLevels))
+        self.scales = [2 ** (self.nLevels - ii - 1) for ii in range(self.nLevels)]
+        self.iterations = list(int(max_iter // 2 ** ii) for ii in range(nLevels))
         self.originalShape = Is.shape
-        self.paddedShape = self.calcPad(self.originalShape, self.nLevels, 5)
+        self.paddedShape = self.calcPad(self.originalShape, self.nLevels, 40)
         self.Is = sp.resize(Is, self.paddedShape)
         self.Im = sp.resize(Im, self.paddedShape)
-
+        self.nD = len(self.Is.shape)
         # Initialize final velocity field
-        self.finalV = self.xp.zeros((3,) + self.paddedShape)
+        self.finalV = self.xp.zeros((self.nD,) + self.paddedShape)
         # Define outshapes
         self.oshapes = []
         for scale in self.scales:
             self.oshapes.append(tuple(int((ii // scale)) for ii in self.paddedShape))
-
-        self.fd = []
-        for ii in range(nLevels):
-            self.fd.append(sp.linop.FiniteDifference(self.oshapes[ii]))
-        self.sigma_x = 1.0
+        self.alpha = alpha
         # Thresholds for numerical stability (only works for images with similar intensity.)
-        self.IntensityDifferenceThreshold = 0.001
+        self.IntensityDifferenceThreshold = 1e-2
         self.DenominatorThreshold = 1e-9
-        self.sigmaDiff = sigmas
-
-    def normalize(I_in, minv, maxv, device):
-        xp = sp.Device(device)
-        out = (maxv - minv) * (I_in - xp.min(I_in[:])) / (xp.max(I_in[:]) - xp.min(I_in[:])) + minv
-        return out
+        self.sigmaDiff = diffusionSigmas
+        self.sigmaFluid = fluidSigmas
+        self.cThresh = cThresh
+        self.variant = variant
+        self.diffeomorphic = diffeomorphic
+        self.compositionType = compositionType
 
     def calcPad(self, ishape, n, p):
         # This function pads image.
@@ -62,127 +79,169 @@ class Demons:
             oshape.append((ii + p) + r)
         return tuple(oshape)
 
-    def findUpdateField(self):
-        # Warp image
-        ImWarped = imwarp(self.ImCurrent, self.corrV, device=self.device)
-        Idiff = self.IsCurrent - ImWarped
-        Denominator = self.dSMag + Idiff ** 2 / self.sigma_x ** 2
-        cfactor = Idiff / Denominator
-        V = cfactor * self.dS
-
-        # Generate mask for null values (convert to zeros)
-        mask = self.xp.zeros(V.shape, dtype=bool)
-        for j in range(3):
-            mask[j] = (
-                (~self.xp.isfinite(V[j]))
-                | (self.xp.abs(Idiff) < self.IntensityDifferenceThreshold)
-                | (Denominator < self.DenominatorThreshold)
-            )
-        V[mask] = 0.0
-        return V
-
-    # def upsample(self, I, oshape, device):
-    #     # Upsampling via FFT zeropadding (upsample and low pass).
-    #     zFactor = oshape[0] / I.shape[0]
-    #     out = sp.fft(I, norm=None)
-    #     out = sp.resize(out, oshape)
-    #     out = self.xp.real(sp.ifft(out, norm=None) * zFactor)
-    #     return out
-
-    # def energy(I1, I2, sigma_x):
-    #     # E_corr s_opt
-    #     # I1 should be Idiff, I2 should be correspondence field
-    #     xp = sp.get_array_module(I1)
-    #     E = xp.linalg.norm(I2) ** 2 / (sigma_x ** 2)
-    #     #  xp.sum(xp.linalg.norm(I1) ** 2 / xp.sum(I1) +
-    #     return E / 2
-
     def run(self):
+        try:
+            print("Original Image Shape: {} ...".format(self.originalShape))
+            print("Padded Image Shape: {} ...".format(self.paddedShape))
+            print("Image Scaling Factors: {} ...".format(self.scales))
+            print("Number of Levels: {} ...".format(self.nLevels))
+            print("Iterations per Level: {} ...".format(self.iterations))
+            print("Diffusion Sigmas: {} ...".format(self.sigmaDiff))
 
-        print("Original Image Shape: {} ...".format(self.originalShape))
-        print("Padded Image Shape: {} ...".format(self.paddedShape))
-        print("Image Scaling Factors: {} ...".format(self.scales))
-        print("Number of Levels: {} ...".format(self.nLevels))
-        print("Iterations per Level: {} ...".format(self.iterations))
-        # print("Fluid Sigmas: {} ...".format(self.sigmaFluids))
-        print("Diffusion Sigmas: {} ...".format(self.sigmaDiff))
+            # Begin Pyramid
+            for ii in range(self.nLevels):
+                iterCurrent = self.iterations[ii]
+                sigmaDiff = self.sigmaDiff
+                sigmaFluid = self.sigmaDiff
+                # sigmaImage = self.sigmaDiff
+                oshapeCurrent = self.oshapes[ii]
 
-        # Begin Pyramid
-        for l in range(self.nLevels):
-            iterCurrent = self.iterations[l]
-            sigmaDiff = self.sigmaDiff
-            oshapeCurrent = self.oshapes[l]
-
-            # self.IsCurrent = self.gaussianPyramid(self.Is, self.nLevels - l - 1)
-            # self.ImCurrent = self.gaussianPyramid(self.Im, self.nLevels - l - 1)
-            # plt.ImagePlot(self.Is)
-            self.IsCurrent = zoom(self.Is, 2 ** -(self.nLevels - l - 1), device=self.device)
-            self.ImCurrent = zoom(self.Im, 2 ** -(self.nLevels - l - 1), device=self.device)
-            # plt.ImagePlot(self.IsCurrent)
-            self.dS = self.fd[l] * self.IsCurrent
-            # plt.ImagePlot(self.dS)
-
-            self.corrV = self.xp.zeros((3,) + oshapeCurrent)
-            # self.corrV[0] = self.gaussianPyramid(self.finalV[0], self.nLevels - l - 1)
-            # self.corrV[1] = self.gaussianPyramid(self.finalV[1], self.nLevels - l - 1)
-            # self.corrV[2] = self.gaussianPyramid(self.finalV[2], self.nLevels - l - 1)
-            self.corrV[0] = zoom(self.finalV[0], 2 ** -(self.nLevels - l - 1), device=self.device)
-            self.corrV[1] = zoom(self.finalV[1], 2 ** -(self.nLevels - l - 1), device=self.device)
-            self.corrV[2] = zoom(self.finalV[2], 2 ** -(self.nLevels - l - 1), device=self.device)
-            self.dSMag = self.dS[0] ** 2 + self.dS[1] ** 2 + self.dS[2] ** 2
-            # plt.ImagePlot(self.dSMag)
-
-            # Generate Gaussian filter in Fourier Space with optimal fft sizes
-            self.filtDiff = filters.gaussianKernel3d(sigmaDiff, device=self.device)
-            self.fftsize = tuple(self.filtDiff.shape[0] + i - 1 for i in oshapeCurrent)
-            self.fftsize = tuple(next_fast_len(i) for i in self.fftsize)
-            self.filtDiff = sp.fft(self.filtDiff, oshape=self.fftsize, norm=None)
-            # plt.ImagePlot(self.filtDiff)
-
-            # Iterate
-            # Progress Bar
-            print("Current Image Shape: {} ...".format(oshapeCurrent))
-            desc = "Level {}/{}".format(l + 1, self.nLevels)
-            disable = not True
-            total = iterCurrent
-            with tqdm(desc=desc, total=total, disable=disable, leave=True) as pbar:
-                for ll in range(iterCurrent):
-                    # Update Velocity Field
-                    self.corrV += self.findUpdateField()
-                    # Convolve (Diffusion Regularize)
-                    self.corrV[0] = self.xp.real(
-                        conv.FFTConvolve(
-                            self.filtDiff, self.corrV[0], shape=self.fftsize, device=self.device
-                        )
+                self.IsCurrent = zoom(self.Is, 2 ** -(self.nLevels - ii - 1), device=self.device)
+                self.ImCurrent = zoom(self.Im, 2 ** -(self.nLevels - ii - 1), device=self.device)
+                D = fd.CentralDifference(oshapeCurrent)
+                self.dS = D * self.IsCurrent
+                # plt.ImagePlot(self.dS)
+                self.corrV = self.xp.zeros((self.nD,) + oshapeCurrent)
+                for jj in range(self.nD):
+                    self.corrV[jj] = zoom(
+                        self.finalV[jj], 2 ** -(self.nLevels - ii - 1), device=self.device
                     )
-                    self.corrV[1] = self.xp.real(
-                        conv.FFTConvolve(
-                            self.filtDiff, self.corrV[1], shape=self.fftsize, device=self.device
-                        )
-                    )
-                    self.corrV[2] = self.xp.real(
-                        conv.FFTConvolve(
-                            self.filtDiff, self.corrV[2], shape=self.fftsize, device=self.device
-                        )
-                    )
-                    pbar.update()
+                self.dSMag = self.xp.zeros(oshapeCurrent)
+                for jj in range(self.nD):
+                    self.dSMag += self.dS[jj] ** 2
 
-            # # Upsample corrV and save as finalV (Should I upsample all the way each time or move up the pyramid?)
-            self.finalV[0] = zoom(self.corrV[0], 2 ** (self.nLevels - l - 1), device=self.device)
-            self.finalV[1] = zoom(self.corrV[1], 2 ** (self.nLevels - l - 1), device=self.device)
-            self.finalV[2] = zoom(self.corrV[2], 2 ** (self.nLevels - l - 1), device=self.device)
-            # ----------------
-            # plt.ImagePlot(self.corrV, title="Update")
-            # plt.ImagePlot(self.finalV, title="finalV (Upsampled)")
-            # -----------------
+                # Generate Gaussian filter in Fourier Space with optimal fft sizes (not sure if needed...)
+                # Diffusion
+                if sigmaDiff > 0.0:
+                    self.filtDiff = filters.gaussianKernelnd(
+                        sigmaDiff, n=self.nD, device=self.device
+                    )
+                    self.fftsizeDiff = tuple(
+                        self.filtDiff.shape[0] + jj - 1 for jj in oshapeCurrent
+                    )
+                    self.fftsizeDiff = tuple(next_fast_len(jj) for jj in self.fftsizeDiff)
+                    self.filtDiff = sp.fft(self.filtDiff, oshape=self.fftsizeDiff, norm=None)
 
-        # crop to original dimensions
-        self.finalV = sp.resize(self.finalV, ((3,) + self.originalShape))
-        self.Is = sp.resize(self.Is, self.originalShape)
-        self.Im = sp.resize(self.Im, self.originalShape)
-        ImWarped = imwarp(self.Im, self.finalV, device=self.device)
-        # plt.ImagePlot(ImWarped, title="Final Warped Image")
-        # plt.ImagePlot(self.finalV, title="Final Warp")
-        # plt.ImagePlot((self.Is - self.Im) / self.Is, title="Original Difference")
-        # plt.ImagePlot((self.Is - ImWarped) / self.Is, title="Registered Difference")
-        return ImWarped, self.finalV
+                # Fluid
+                if sigmaFluid > 0.0:
+                    self.filtFluid = filters.gaussianKernelnd(
+                        sigmaFluid, n=self.nD, device=self.device
+                    )
+                    self.fftsizeFluid = tuple(
+                        self.filtFluid.shape[0] + jj - 1 for jj in oshapeCurrent
+                    )
+                    self.fftsizeFluid = tuple(next_fast_len(jj) for jj in self.fftsizeFluid)
+                    self.filtFluid = sp.fft(self.filtFluid, oshape=self.fftsizeFluid, norm=None)
+
+                # Iterate
+                # Progress Bar
+                self.currentLoss = 0
+                self.loss = []
+                stop = 0
+                nLossAverages = 4 * (self.nLevels - ii)
+                print("Current Image Shape: {} ...".format(oshapeCurrent))
+                desc = "Level {}/{}".format(ii + 1, self.nLevels)
+                disable = not True
+                total = iterCurrent
+                with tqdm(desc=desc, total=total, disable=disable, leave=True) as pbar:
+                    for jj in range(iterCurrent):
+                        # Update Velocity Field
+                        V, self.currentLoss = update(
+                            self.IsCurrent,
+                            self.ImCurrent,
+                            self.corrV,
+                            self.alpha,
+                            dS=self.dS,
+                            dSMag=self.dSMag,
+                            variant=self.variant,
+                            scalingFactor=(self.nLevels - ii),
+                            diffeomorphic=self.diffeomorphic,
+                            device=self.device,
+                        )
+                        # Convolve (Fluid Regularization (Roughly))
+                        # plt.ImagePlot(V)
+                        if sigmaFluid > 0.0:
+                            for kk in range(self.nD):
+                                V[kk] = self.xp.real(
+                                    conv.FFTConvolve(
+                                        self.filtFluid,
+                                        V[kk],
+                                        shape=self.fftsizeFluid,
+                                        device=self.device,
+                                    )
+                                )
+                        # Accumulate field
+                        self.corrV = diffeomorphism.compose(
+                            self.corrV,
+                            V,
+                            diffeomorphic=self.diffeomorphic,
+                            compositionType=self.compositionType,
+                            device=self.device,
+                        )
+                        # plt.ImagePlot(self.corrV)
+                        # self.corrV += V % Additive is first order approximation in log domain for diffeomorphic
+                        # Stopping criteria
+                        self.loss.append(self.currentLoss)
+                        if jj > 0 + nLossAverages:
+                            prevLoss = self.xp.mean(
+                                self.xp.array(self.loss[jj - nLossAverages - 1 : jj - 1])
+                            )
+                            stop = self.xp.abs((self.loss[jj] - prevLoss) / prevLoss)
+                            pbar.set_postfix(loss=stop)
+                            if stop < self.cThresh:
+                                break
+
+                        # Convolve (Diffusion Regularization (Roughly))
+                        # plt.ImagePlot(self.corrV)
+                        if sigmaDiff > 0.0:
+                            for kk in range(self.nD):
+                                self.corrV[kk] = self.xp.real(
+                                    conv.FFTConvolve(
+                                        self.filtDiff,
+                                        self.corrV[kk],
+                                        shape=self.fftsizeDiff,
+                                        device=self.device,
+                                    )
+                                )
+                        pbar.set_postfix(loss=stop)
+                        pbar.update()
+                        # plt.ImagePlot(self.corrV)
+
+                # # Upsample corrV and save as finalV (Should I upsample all the way each time or move up the pyramid?)
+                for jj in range(self.nD):
+                    self.finalV[jj] = zoom(
+                        self.corrV[jj], 2 ** (self.nLevels - ii - 1), device=self.device
+                    )
+
+            # crop to original dimensions
+            self.finalV = sp.resize(self.finalV, ((self.nD,) + self.originalShape))
+            self.Is = sp.resize(self.Is, self.originalShape)
+            self.Im = sp.resize(self.Im, self.originalShape)
+
+            # Warp Final Image
+            ImWarped = imwarp(self.Im, self.finalV, device=self.device)
+            # post processing
+            # ImWarped = sp.to_device(imwarp(self.Im, self.finalV, device=self.device))
+            # Sharpen to remove blurring by interpolation
+            # ImEdges = ImWarped - median_filter(ImWarped, 5)
+            # skern = filters.sharpenKernelNd(self.nD, device=self.device)
+            # skern = sp.triang((3, 3, 3), device=self.device)
+            # skern /= self.xp.sum(skern)
+            # ImEdges = ImWarped - sp.resize(sp.convolve(ImWarped, skern), self.originalShape)
+            # ImWarped += ImEdges
+            # ImEdges = self.xp.sum(self.xp.square(fd.Laplacian(ImWarped.shape) * ImWarped), axis=0)
+            # if self.nD == 3:
+            #     ImEdges = ImEdges.reshape((ImEdges.shape[0] * ImEdges.shape[1]), ImEdges.shape[2])
+            # U, s, V = np.linalg.svd(sp.to_device(ImEdges), full_matrices=False)
+            # plt.LinePlot(s, mode="r")
+            # ImWarped += normalize(ImEdges, 0, self.maxval, device=-1)
+            # ImWarped += median_filter(normalize(ImEdges, 0, ImWarped.max(), device=-1), 5)
+            # plt.ImagePlot(ImEdges, title="Laplacian Image")
+            plt.ImagePlot(ImWarped, title="Warped Image")
+            plt.ImagePlot(self.Is - ImWarped, title="Registered Difference")
+            plt.ImagePlot(self.finalV, title="Final Warp Field")
+            plt.ImagePlot(energy.jacobianDet(self.finalV) < 0, title="Jacobian Determinant < 0")
+            plt.ImagePlot(energy.jacobianDet(self.finalV), title="Jacobian Determinant")
+            return ImWarped, self.finalV
+        except KeyboardInterrupt:
+            raise

@@ -1,11 +1,10 @@
 import sigpy as sp
 from filters import butter
-import convolutions as conv
 from cupyx.scipy import ndimage as cuTools
 from scipy import ndimage as npTools
 
 
-def gaussianPyramidDownsample(I, n, device=-1):
+def gaussianPyramidDownsample(arrIn, n, device=-1):
     """
         Use gaussian pyramid to downsample image by n levels
         Should be faster than going straight to downsample factor
@@ -13,20 +12,20 @@ def gaussianPyramidDownsample(I, n, device=-1):
         Works.
     """
     xp = sp.Device(device).xp
-    ishape = I.shape
+    ishape = arrIn.shape
     if n == 0:
-        return I
+        return arrIn
     # loop through scales
     for ii in range(n):
         oshape = tuple(int(jj // (2 ** ii)) for jj in ishape)
         k1d = xp.array([1, 4, 6, 4, 1]) / 16  # sigma ~1.0
         k3dx, k3dy, k3dz = xp.ix_(k1d, k1d, k1d)
         k3d = k3dx * k3dy * k3dz
-        out = sp.convolve(I, k3d)
+        out = sp.convolve(arrIn, k3d)
         out = sp.resize(out, oshape)
-        out = sp.downsample(out, (2,) * I.ndim)
-        # Set I for next level
-        I = out
+        out = sp.downsample(out, (2,) * arrIn.ndim)
+        # Set arrIn for next level
+        arrIn = out
 
     return out
 
@@ -68,7 +67,7 @@ def antialiasResize(arrIn, factor, device=-1):
     % is chosen based on the resize scale factor to limit aliasing effects.
     Works for downsampling.
     """
-    xp = sp.Device(device).xp
+    # xp = sp.Device(device).xp
     if factor == 1:
         return arrIn
 
@@ -119,9 +118,9 @@ def zoom(arrIn, factor, device=-1):
         filt = butter(0.5 * factor, n=2, oshape=arrInFFT.shape, device=device)
         # Obtain low-pass filtered version of input spatial domain volume
 
-        arrIn = sp.ifft(arrInFFT * filt, norm=None)
-
-        out = sp.downsample(arrIn, (int(1 // factor), int(1 // factor), int(1 // factor)))
+        arrIn = sp.ifft(arrInFFT * filt * filt, norm=None)
+        factors = tuple(int(1 // factor) for ii in range(len(arrIn.shape)))
+        out = sp.downsample(arrIn, factors)
         return xp.real(out)
     else:
         if device == -1:

@@ -1,5 +1,6 @@
 import numpy as np
 import sigpy as sp
+import sigpy.plot as plt
 
 
 def gaussianKernel1d(sigma=1.0, device=-1):
@@ -28,21 +29,55 @@ def gaussianKernel1d(sigma=1.0, device=-1):
 #     return k1d
 
 
-def gaussianKernel3d(sigma=1.0, device=-1):
+# def gaussianKernel3d(sigma=1.0, device=-1):
+#     xp = sp.Device(device).xp
+#     if xp.array(sigma).size == 1:
+#         k1d = gaussianKernel1d(sigma)
+#         k3dx, k3dy, k3dz = xp.ix_(k1d, k1d, k1d)
+#         k3d = k3dx * k3dy * k3dz
+#     else:
+#         k1d = gaussianKernel1d(sigma[0])
+#         k2d = gaussianKernel1d(sigma[1])
+#         k3d = gaussianKernel1d(sigma[2])
+#         k3dx, k3dy, k3dz = xp.ix_(k1d, k2d, k3d)
+#         k3d = k3dx * k3dy * k3dz
+#     # Normalize (Unless 1D already normalized)
+#     k3d = k3d / xp.sum(k3d)
+#     return k3d
+
+
+def gaussianKernelnd(sigma=1.0, n=1, device=-1):
     xp = sp.Device(device).xp
-    if xp.array(sigma).size == 1:
-        k1d = gaussianKernel1d(sigma)
-        k3dx, k3dy, k3dz = xp.ix_(k1d, k1d, k1d)
-        k3d = k3dx * k3dy * k3dz
-    else:
-        k1d = gaussianKernel1d(sigma[0])
-        k2d = gaussianKernel1d(sigma[1])
-        k3d = gaussianKernel1d(sigma[2])
-        k3dx, k3dy, k3dz = xp.ix_(k1d, k2d, k3d)
-        k3d = k3dx * k3dy * k3dz
+    k1d = gaussianKernel1d(sigma)
+    if n == 1:
+        knd = k1d
+    if n == 2:
+        kndx, kndy = xp.ix_(k1d, k1d)
+        knd = kndx * kndy
+    if n == 3:
+        kndx, kndy, kndz = xp.ix_(k1d, k1d, k1d)
+        knd = kndx * kndy * kndz
+
     # Normalize (Unless 1D already normalized)
-    k3d = k3d / xp.sum(k3d)
-    return k3d
+    knd = knd / xp.sum(knd)
+    return knd
+
+
+def sharpenKernelNd(n=1, device=-1):
+    xp = sp.Device(device).xp
+    k1d = xp.array([0, -1, 0])
+    if n == 1:
+        knd = k1d
+    if n == 2:
+        kndx, kndy = xp.ix_(k1d, k1d)
+        knd = kndx * kndy
+    if n == 3:
+        kndx, kndy, kndz = xp.ix_(k1d, k1d, k1d)
+        knd = kndx * kndy * kndz
+
+    # Normalize (Unless 1D already normalized)
+    knd = knd / xp.sum(knd)
+    return knd
 
 
 # Source: A Survey of Gaussian Convolution Algorithms -- Pascal Getreuer
@@ -199,11 +234,11 @@ def eboxGaussianConv3D(volIn, r, c1, c2, k, stride=1, device=-1):
         assert volIn.ndim == 3, "Input is empty or radius is negative"
         w = N[0]
         h = N[1]
-        d = N[2]
+        # d = N[2]
         #  Could probably do in strides to be cache friendly... a problem for another day.
         # Convolve along 3rd dim.
         # Flatten array for speed?
-        vol = volIn.ravel()
+        # vol = volIn.ravel()
         # for ii in range(d):
         #     volIn[:, :, ii] = eboxGaussianConv2D(volIn[:, :, ii], r, c1, c2, k)
         for x in range(w):
@@ -229,14 +264,26 @@ def butter(D0, oshape, n=2, device=-1):
     n is number of poles in filter.
     """
     xp = sp.Device(device).xp
-    x, y, z = oshape
     # Define normalized frequency mesh grid
-    u = createNormFrequencyVector(y, device=device)
-    v = createNormFrequencyVector(x, device=device)
-    w = createNormFrequencyVector(z, device=device)
-    [U, V, W] = xp.meshgrid(u, v, w)
 
-    D = xp.sqrt(U ** 2 + V ** 2 + W ** 2)
+    if len(oshape) == 3:
+        x, y, z = oshape
+        u = createNormFrequencyVector(y, device=device)
+        v = createNormFrequencyVector(x, device=device)
+        w = createNormFrequencyVector(z, device=device)
+        [U, V, W] = xp.meshgrid(u, v, w)
+        D = xp.sqrt(U ** 2 + V ** 2 + W ** 2)
+    elif len(oshape) == 2:
+        x, y = oshape
+        u = createNormFrequencyVector(y, device=device)
+        v = createNormFrequencyVector(x, device=device)
+        [U, V] = xp.meshgrid(u, v)
+        D = xp.sqrt(U ** 2 + V ** 2)
+    elif len(oshape) == 1:  # This will probably error.
+        x = oshape
+        v = createNormFrequencyVector(x, device=device)
+        U = xp.meshgrid(v)
+        D = xp.sqrt(U ** 2)
 
     # Transfer function
     H = 1 / (1 + (D / D0) ** (2 * n))
