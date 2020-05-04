@@ -5,3 +5,4 @@ testoaconvolve.py
 testoaconvolve1d.py
 testResize.py
 toeplitzConvolve.py
+testCircshift.py
