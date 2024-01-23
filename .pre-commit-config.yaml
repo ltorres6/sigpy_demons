@@ -1,0 +1,6 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: ''  # Specify the version of ruff you want to use
+    hooks:
+      - id: ruff
+      - id: ruff-format

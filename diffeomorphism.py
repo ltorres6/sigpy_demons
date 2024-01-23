@@ -47,14 +47,14 @@ def expfield(fieldIn, device=-1):
     # Find n, scaling parameter
     xp = sp.Device(device).xp
     # n big enough so max(v * 2^-n) < 0.5 pixel)
-    n = 2 * xp.max(xp.sqrt(xp.sum(fieldIn ** 2, axis=0)))  # == 2^n
+    n = 2 * xp.max(xp.sqrt(xp.sum(fieldIn**2, axis=0)))  # == 2^n
     if ~xp.isfinite(n) or n <= 0.0:
         n = 0
     else:
         n = int(xp.ceil(xp.log2(n)))
 
     # 1) Scaling Step (Scale towards 0 for efficient computation) # Compute exp(V/2^N)?
-    scale = 2 ** -n
+    scale = 2**-n
     fieldOut = fieldIn * scale
     # 2) square it n times to get exp(V)
     for _ in range(n):
@@ -86,8 +86,12 @@ def LieBracket(fieldIn1, fieldIn2, device=-1):
             b[ii] = J1x[ii] * fieldIn2[0] + J1y[ii] * fieldIn2[1]
     if nDim == 3:
         for ii in range(nDim):
-            a[ii] = J2x[ii] * fieldIn1[0] + J2y[ii] * fieldIn1[1] + J2z[ii] * fieldIn1[2]
-            b[ii] = J1x[ii] * fieldIn2[0] + J1y[ii] * fieldIn2[1] + J1z[ii] * fieldIn2[2]
+            a[ii] = (
+                J2x[ii] * fieldIn1[0] + J2y[ii] * fieldIn1[1] + J2z[ii] * fieldIn1[2]
+            )
+            b[ii] = (
+                J1x[ii] * fieldIn2[0] + J1y[ii] * fieldIn2[1] + J1z[ii] * fieldIn2[2]
+            )
 
     # for ii in range(fieldIn1.shape[0]):
     #     for jj in range(fieldIn1.shape[0]):

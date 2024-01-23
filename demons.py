@@ -48,7 +48,7 @@ class Demons:
         # plt.ImagePlot(Is)
         self.nLevels = nLevels
         self.scales = [2 ** (self.nLevels - ii - 1) for ii in range(self.nLevels)]
-        self.iterations = list(int(max_iter // 2 ** ii) for ii in range(nLevels))
+        self.iterations = list(int(max_iter // 2**ii) for ii in range(nLevels))
         self.originalShape = Is.shape
         self.paddedShape = self.calcPad(self.originalShape, self.nLevels, 40)
         self.Is = sp.resize(Is, self.paddedShape)
@@ -75,7 +75,7 @@ class Demons:
         # This function pads image.
         oshape = []
         for ii in ishape:
-            r = 2 ** n - (ii + p) % (2 ** n)
+            r = 2**n - (ii + p) % (2**n)
             oshape.append((ii + p) + r)
         return tuple(oshape)
 
@@ -96,15 +96,21 @@ class Demons:
                 # sigmaImage = self.sigmaDiff
                 oshapeCurrent = self.oshapes[ii]
 
-                self.IsCurrent = zoom(self.Is, 2 ** -(self.nLevels - ii - 1), device=self.device)
-                self.ImCurrent = zoom(self.Im, 2 ** -(self.nLevels - ii - 1), device=self.device)
+                self.IsCurrent = zoom(
+                    self.Is, 2 ** -(self.nLevels - ii - 1), device=self.device
+                )
+                self.ImCurrent = zoom(
+                    self.Im, 2 ** -(self.nLevels - ii - 1), device=self.device
+                )
                 D = fd.CentralDifference(oshapeCurrent)
                 self.dS = D * self.IsCurrent
                 # plt.ImagePlot(self.dS)
                 self.corrV = self.xp.zeros((self.nD,) + oshapeCurrent)
                 for jj in range(self.nD):
                     self.corrV[jj] = zoom(
-                        self.finalV[jj], 2 ** -(self.nLevels - ii - 1), device=self.device
+                        self.finalV[jj],
+                        2 ** -(self.nLevels - ii - 1),
+                        device=self.device,
                     )
                 self.dSMag = self.xp.zeros(oshapeCurrent)
                 for jj in range(self.nD):
@@ -119,8 +125,12 @@ class Demons:
                     self.fftsizeDiff = tuple(
                         self.filtDiff.shape[0] + jj - 1 for jj in oshapeCurrent
                     )
-                    self.fftsizeDiff = tuple(next_fast_len(jj) for jj in self.fftsizeDiff)
-                    self.filtDiff = sp.fft(self.filtDiff, oshape=self.fftsizeDiff, norm=None)
+                    self.fftsizeDiff = tuple(
+                        next_fast_len(jj) for jj in self.fftsizeDiff
+                    )
+                    self.filtDiff = sp.fft(
+                        self.filtDiff, oshape=self.fftsizeDiff, norm=None
+                    )
 
                 # Fluid
                 if sigmaFluid > 0.0:
@@ -130,8 +140,12 @@ class Demons:
                     self.fftsizeFluid = tuple(
                         self.filtFluid.shape[0] + jj - 1 for jj in oshapeCurrent
                     )
-                    self.fftsizeFluid = tuple(next_fast_len(jj) for jj in self.fftsizeFluid)
-                    self.filtFluid = sp.fft(self.filtFluid, oshape=self.fftsizeFluid, norm=None)
+                    self.fftsizeFluid = tuple(
+                        next_fast_len(jj) for jj in self.fftsizeFluid
+                    )
+                    self.filtFluid = sp.fft(
+                        self.filtFluid, oshape=self.fftsizeFluid, norm=None
+                    )
 
                 # Iterate
                 # Progress Bar
@@ -184,7 +198,9 @@ class Demons:
                         self.loss.append(self.currentLoss)
                         if jj > 0 + nLossAverages:
                             prevLoss = self.xp.mean(
-                                self.xp.array(self.loss[jj - nLossAverages - 1 : jj - 1])
+                                self.xp.array(
+                                    self.loss[jj - nLossAverages - 1 : jj - 1]
+                                )
                             )
                             stop = self.xp.abs((self.loss[jj] - prevLoss) / prevLoss)
                             pbar.set_postfix(loss=stop)
@@ -240,7 +256,9 @@ class Demons:
             plt.ImagePlot(ImWarped, title="Warped Image")
             plt.ImagePlot(self.Is - ImWarped, title="Registered Difference")
             plt.ImagePlot(self.finalV, title="Final Warp Field")
-            plt.ImagePlot(energy.jacobianDet(self.finalV) < 0, title="Jacobian Determinant < 0")
+            plt.ImagePlot(
+                energy.jacobianDet(self.finalV) < 0, title="Jacobian Determinant < 0"
+            )
             plt.ImagePlot(energy.jacobianDet(self.finalV), title="Jacobian Determinant")
             return ImWarped, self.finalV
         except KeyboardInterrupt:

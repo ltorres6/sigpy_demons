@@ -6,16 +6,16 @@ def energy(arrIn, fieldIn, alpha):
     # From Herve Lombaert (matlab exchange)
     xp = sp.get_array_module(arrIn)
     Esim = xp.sum(xp.square(arrIn)) / (xp.size(arrIn))
-    Ereg = xp.sum(xp.square(jacobianDet(fieldIn))) * (alpha ** 2) / (xp.size(arrIn))
+    Ereg = xp.sum(xp.square(jacobianDet(fieldIn))) * (alpha**2) / (xp.size(arrIn))
     return Esim + Ereg
 
 
 def energy2(arrIn, fieldIn, alpha):
     xp = sp.get_array_module(arrIn)
     # Need to fix for 2d
-    E = xp.sum(arrIn ** 2 + arrIn ** 2 * (fieldIn[0] ** 2 + fieldIn[1] ** 2 + fieldIn[2] ** 2)) * (
-        alpha ** 2
-    )
+    E = xp.sum(
+        arrIn**2 + arrIn**2 * (fieldIn[0] ** 2 + fieldIn[1] ** 2 + fieldIn[2] ** 2)
+    ) * (alpha**2)
     return E
 
 
@@ -23,7 +23,7 @@ def RMSE(arrIn):
     # E_corr s_opt
     # I1 should be Idiff image
     xp = sp.get_array_module(arrIn)
-    E = xp.sqrt(xp.mean(arrIn ** 2) ** 2)
+    E = xp.sqrt(xp.mean(arrIn**2) ** 2)
     return E
 
 
@@ -31,7 +31,7 @@ def HarmonicEnergy(fieldIn, alpha):
     # Not finished
     xp = sp.get_array_module(fieldIn)
     E = jacobianDet(fieldIn)
-    E = xp.mean(xp.linalg.norm(E) ** 2) * (alpha ** 2)
+    E = xp.mean(xp.linalg.norm(E) ** 2) * (alpha**2)
     return -1 * E
 
 

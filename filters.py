@@ -103,7 +103,6 @@ def sharpenKernelNd(n=1, device=-1):
 
 
 def symmExtension(N, n):
-
     """
     Half-sample symmetric boundary symmExtension(    # param N signal length
     param n requested sample, possibly outside {0,...,N-1}
@@ -153,7 +152,13 @@ def eboxKernel(r, alpha, c1, c2, device=-1):
 
 
 def eboxFilter(
-    arrIn, r, c1, c2, device=-1, stridein=1, strideout=1,
+    arrIn,
+    r,
+    c1,
+    c2,
+    device=-1,
+    stridein=1,
+    strideout=1,
 ):
     """
     1D extended box filter (strided).
@@ -172,7 +177,10 @@ def eboxFilter(
     arrOut = xp.zeros(arrIn.shape)
     arrOut[0] = accum = (
         c1
-        * (arrIn[stridein * symmExtension(N, r + 1)] + arrIn[stridein * symmExtension(N, -r - 1)])
+        * (
+            arrIn[stridein * symmExtension(N, r + 1)]
+            + arrIn[stridein * symmExtension(N, -r - 1)]
+        )
         + (c1 + c2) * accum
     )
 
@@ -272,18 +280,18 @@ def butter(D0, oshape, n=2, device=-1):
         v = createNormFrequencyVector(x, device=device)
         w = createNormFrequencyVector(z, device=device)
         [U, V, W] = xp.meshgrid(u, v, w)
-        D = xp.sqrt(U ** 2 + V ** 2 + W ** 2)
+        D = xp.sqrt(U**2 + V**2 + W**2)
     elif len(oshape) == 2:
         x, y = oshape
         u = createNormFrequencyVector(y, device=device)
         v = createNormFrequencyVector(x, device=device)
         [U, V] = xp.meshgrid(u, v)
-        D = xp.sqrt(U ** 2 + V ** 2)
+        D = xp.sqrt(U**2 + V**2)
     elif len(oshape) == 1:  # This will probably error.
         x = oshape
         v = createNormFrequencyVector(x, device=device)
         U = xp.meshgrid(v)
-        D = xp.sqrt(U ** 2)
+        D = xp.sqrt(U**2)
 
     # Transfer function
     H = 1 / (1 + (D / D0) ** (2 * n))

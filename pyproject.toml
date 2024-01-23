@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "sigpy-demons"
+version = "0.1.0"
+description = "This project hosts code for running reasonably fast Demons registration variants in python."
+authors = ["Luis Torres <luigibytes@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+pre-commit = "^3.6.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

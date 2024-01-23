@@ -6,10 +6,10 @@ from scipy import ndimage as npTools
 
 def gaussianPyramidDownsample(arrIn, n, device=-1):
     """
-        Use gaussian pyramid to downsample image by n levels
-        Should be faster than going straight to downsample factor
-        because we keep convolution kernel small.
-        Works.
+    Use gaussian pyramid to downsample image by n levels
+    Should be faster than going straight to downsample factor
+    because we keep convolution kernel small.
+    Works.
     """
     xp = sp.Device(device).xp
     ishape = arrIn.shape
@@ -17,7 +17,7 @@ def gaussianPyramidDownsample(arrIn, n, device=-1):
         return arrIn
     # loop through scales
     for ii in range(n):
-        oshape = tuple(int(jj // (2 ** ii)) for jj in ishape)
+        oshape = tuple(int(jj // (2**ii)) for jj in ishape)
         k1d = xp.array([1, 4, 6, 4, 1]) / 16  # sigma ~1.0
         k3dx, k3dy, k3dz = xp.ix_(k1d, k1d, k1d)
         k3d = k3dx * k3dy * k3dz
@@ -80,7 +80,9 @@ def antialiasResize(arrIn, factor, device=-1):
 
         arrIn = sp.ifft(arrInFFT * filt, norm=None)
 
-        out = sp.downsample(arrIn,)
+        out = sp.downsample(
+            arrIn,
+        )
         return
     # Apply scale transform of input volume
     # affineMatrix = xp.array([[factor, 0, 0, 0], [0, factor, 0, 0], [0, 0, factor, 0], [0, 0, 0, 1]])

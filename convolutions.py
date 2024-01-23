@@ -104,7 +104,7 @@ def toepelitzConvolve():
 
 def FFTConvolve(filt, arrIn, shape, device=-1):
     """
-        Convolves filt (Window in fourier space) with arrIn with fft method.
+    Convolves filt (Window in fourier space) with arrIn with fft method.
     """
     oshape = arrIn.shape
     arrInFFT = sp.fft(arrIn, oshape=shape, norm=None)
