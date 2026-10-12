@@ -40,13 +40,11 @@ def test_gaussian_nd_is_normalised_separable_product(xp, n):
     assert np.allclose(k, expected)
 
 
-@pytest.mark.xfail(reason="normalized_frequencies has its even/odd branches swapped")
 @pytest.mark.parametrize("n", [7, 8, 31, 32])
 def test_frequency_vector_matches_centred_fft(n):
     assert np.allclose(to_np(normalized_frequencies(n)), np.fft.fftshift(np.fft.fftfreq(n)))
 
 
-@pytest.mark.xfail(reason="frequency grid is offset by half a bin, so the DC sample is not exactly 0")
 @pytest.mark.parametrize("oshape", [(16, 16), (15, 17), (8, 10, 12)])
 def test_butterworth_unit_gain_at_dc(xp, oshape):
     # sigpy's centred FFT puts DC at index n // 2 along each axis.
@@ -61,4 +59,4 @@ def test_butterworth_is_lowpass(xp, oshape):
     assert np.all((h > 0) & (h <= 1))
     centre = tuple(s // 2 for s in oshape)
     corner = (0,) * len(oshape)
-    assert h[centre] > 0.95 and h[corner] < 0.1
+    assert h[centre] > 0.99 and h[corner] < 0.1

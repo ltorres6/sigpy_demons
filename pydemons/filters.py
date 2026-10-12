@@ -29,9 +29,7 @@ def gaussian_kernel(sigma=1.0, ndim=1, xp=np):
 
 def normalized_frequencies(n, xp=np):
     """Frequencies in cycles/sample of a centred (``fftshift``-ed) length-``n`` FFT."""
-    if n % 2 == 0:
-        return xp.linspace(-0.5 + 1 / (2 * n), 0.5 - 1 / (2 * n), n)
-    return xp.linspace(-0.5, 0.5 - 1 / n, n)
+    return xp.fft.fftshift(xp.fft.fftfreq(n))
 
 
 def butterworth(cutoff, shape, order=2, xp=np):

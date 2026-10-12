@@ -28,7 +28,6 @@ def test_upsample_shape(xp, shape):
     assert out.shape == tuple(2 * s for s in shape)
 
 
-@pytest.mark.xfail(reason="low-pass filter has no exact DC sample, so constants are attenuated")
 @pytest.mark.parametrize("shape", [(32, 32), (16, 8, 12)])
 def test_downsample_preserves_constant(xp, shape):
     out = to_np(zoom(xp.full(shape, 2.0), 0.5))
