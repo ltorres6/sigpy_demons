@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from scipy.fft import next_fast_len
 
-from pydemons.backend import get_array_module
+from pydemons.backend import get_array_module, get_ndimage, get_signal
 
 
 class FFTConvolver:
@@ -35,3 +35,23 @@ class FFTConvolver:
         spectrum = xp.fft.rfftn(arr, s=self.fft_shape, axes=self.axes) * self.kernel_fft
         out = xp.fft.irfftn(spectrum, s=self.fft_shape, axes=self.axes)
         return out[self.crop]
+
+
+def _check_odd(kernel):
+    if any(k % 2 == 0 for k in kernel.shape):
+        raise ValueError(f"kernel must have odd length along every axis, got {kernel.shape}")
+
+
+def convolve(arr, kernel):
+    """Direct zero-padded convolution with output the shape of ``arr``. Best for small kernels."""
+    _check_odd(kernel)
+    return get_ndimage(get_array_module(arr, kernel)).convolve(arr, kernel, mode="constant", cval=0.0)
+
+
+def oa_convolve(arr, kernel):
+    """Overlap-add zero-padded convolution with output the shape of ``arr``.
+
+    Faster than a single large FFT when the kernel is much smaller than ``arr``.
+    """
+    _check_odd(kernel)
+    return get_signal(get_array_module(arr, kernel)).oaconvolve(arr, kernel, mode="same")

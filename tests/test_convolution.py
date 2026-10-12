@@ -42,3 +42,22 @@ def test_reusable_across_calls(xp):
     smoother = FFTConvolver(k, (16, 16))
     a, b = (np.random.default_rng(s).standard_normal((16, 16)) for s in (2, 3))
     assert np.allclose(to_np(smoother(xp.asarray(a + b))), to_np(smoother(xp.asarray(a)) + smoother(xp.asarray(b))))
+
+
+@pytest.mark.parametrize("method", ["convolve", "oa_convolve"])
+@pytest.mark.parametrize("shape,kshape", [((30, 40), (5, 7)), ((12, 14, 10), (3, 3, 5)), ((500,), (31,))])
+def test_direct_and_overlap_add_match_ndimage(xp, method, shape, kshape):
+    from pydemons import convolution
+
+    rng = np.random.default_rng(4)
+    arr, k = rng.standard_normal(shape), rng.standard_normal(kshape)
+    out = getattr(convolution, method)(xp.asarray(arr), xp.asarray(k))
+    assert out.shape == shape
+    assert np.allclose(to_np(out), convolve(arr, k, mode="constant"), atol=1e-8)
+
+
+def test_convolve_requires_odd_kernel():
+    from pydemons.convolution import convolve as pd_convolve
+
+    with pytest.raises(ValueError):
+        pd_convolve(np.zeros((8, 8)), np.ones((2, 3)))

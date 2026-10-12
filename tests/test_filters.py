@@ -60,3 +60,61 @@ def test_butterworth_is_lowpass(xp, oshape):
     centre = tuple(s // 2 for s in oshape)
     corner = (0,) * len(oshape)
     assert h[centre] > 0.99 and h[corner] < 0.1
+
+
+# --------------------------------------------------------------------------- extended box Gaussian
+
+
+@pytest.mark.parametrize("sigma", [1.0, 2.5, 4.0])
+@pytest.mark.parametrize("passes", [3, 4])
+def test_extended_box_impulse_response_has_exact_variance(xp, sigma, passes):
+    # Gwosdek et al. choose the box width and edge weight so the variance is exactly sigma**2.
+    from pydemons.filters import extended_box_gaussian
+
+    impulse = np.zeros(201)
+    impulse[100] = 1.0
+    h = to_np(extended_box_gaussian(xp.asarray(impulse), sigma, passes=passes))
+    x = np.arange(201) - 100
+    assert np.isclose(h.sum(), 1.0)
+    assert np.isclose((h * x**2).sum(), sigma**2, rtol=1e-9)
+    assert np.allclose(h, h[::-1])
+
+
+@pytest.mark.parametrize("shape", [(64, 48), (24, 20, 16)])
+def test_extended_box_approximates_gaussian_filter(xp, shape):
+    from scipy.ndimage import gaussian_filter
+
+    from pydemons.filters import extended_box_gaussian
+
+    arr = np.random.default_rng(0).random(shape)
+    out = to_np(extended_box_gaussian(xp.asarray(arr), 2.0, passes=4))
+    assert out.shape == shape
+    assert np.abs(out - gaussian_filter(arr, 2.0, mode="reflect")).max() < 0.01
+
+
+def test_extended_box_preserves_constant_and_mean(xp):
+    from pydemons.filters import extended_box_gaussian
+
+    assert np.allclose(to_np(extended_box_gaussian(xp.full((30, 30), 2.5), 3.0)), 2.5)
+    arr = np.random.default_rng(1).random((40, 40))
+    assert np.isclose(to_np(extended_box_gaussian(xp.asarray(arr), 3.0)).mean(), arr.mean())
+
+
+def test_extended_box_rejects_bad_sigma():
+    from pydemons.filters import extended_box_gaussian
+
+    with pytest.raises(ValueError):
+        extended_box_gaussian(np.zeros(10), 0.0)
+
+
+# --------------------------------------------------------------------------- unsharp mask
+
+
+def test_unsharp_mask_keeps_constant_and_boosts_detail(xp):
+    from pydemons.filters import unsharp_mask
+
+    assert np.allclose(to_np(unsharp_mask(xp.full((20, 20), 1.5), sigma=1.0, amount=1.0)), 1.5)
+    arr = np.random.default_rng(2).random((40, 40))
+    out = to_np(unsharp_mask(xp.asarray(arr), sigma=1.0, amount=1.0))
+    assert np.isclose(out.mean(), arr.mean(), atol=1e-3)
+    assert out.std() > arr.std()
