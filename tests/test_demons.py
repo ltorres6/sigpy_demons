@@ -76,7 +76,6 @@ def test_3d_registration_runs():
 
 
 @pytest.mark.slow
-@pytest.mark.xfail(reason="fluidSigmas is ignored: run() uses the diffusion sigma for both")
 def test_fluid_sigma_changes_result():
     shape = (64, 64)
     Is = blobs(shape)

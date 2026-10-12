@@ -122,7 +122,7 @@ class Demons:
             factor = 2.0 ** -(self.n_levels - level - 1)
             shape = self.level_shapes[level]
             sigma_diffusion = self.diffusion_sigma
-            sigma_fluid = self.diffusion_sigma
+            sigma_fluid = self.fluid_sigma
 
             fixed = zoom(self.fixed, factor)
             moving = zoom(self.moving, factor)
