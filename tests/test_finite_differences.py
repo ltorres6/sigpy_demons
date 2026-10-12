@@ -4,8 +4,6 @@ import pytest
 from conftest import grid, interior, to_np
 from pydemons.differences import gradient
 
-GRADIENT_SCALE_BUG = pytest.mark.xfail(reason="gradient returns f(x+1)-f(x-1) without dividing by 2")
-
 
 @pytest.mark.parametrize("shape", [(24, 20), (12, 10, 8)])
 def test_gradient_shape(xp, shape):
@@ -18,7 +16,6 @@ def test_gradient_of_constant_is_zero(xp, shape):
     assert np.allclose(to_np(gradient(xp.full(shape, 3.5))), 0.0)
 
 
-@GRADIENT_SCALE_BUG
 @pytest.mark.parametrize("shape", [(24, 20), (12, 10, 8)])
 def test_gradient_of_ramp_equals_slope(xp, shape):
     slopes = [0.5, -2.0, 1.25][: len(shape)]
@@ -29,7 +26,6 @@ def test_gradient_of_ramp_equals_slope(xp, shape):
         assert np.allclose(out[i][interior(len(shape), 1)], s)
 
 
-@GRADIENT_SCALE_BUG
 def test_gradient_is_periodic_central_difference(xp):
     # Boundaries wrap, so a periodic sinusoid has an exact closed-form central difference everywhere.
     n, k = 32, 3

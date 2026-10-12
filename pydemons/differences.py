@@ -11,4 +11,4 @@ def gradient(arr):
     Returns an array of shape ``(arr.ndim, *arr.shape)``; boundaries wrap.
     """
     xp = get_array_module(arr)
-    return xp.stack([xp.roll(arr, -1, axis=i) - xp.roll(arr, 1, axis=i) for i in range(arr.ndim)])
+    return xp.stack([(xp.roll(arr, -1, axis=i) - xp.roll(arr, 1, axis=i)) / 2 for i in range(arr.ndim)])

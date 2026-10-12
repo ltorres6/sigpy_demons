@@ -10,7 +10,6 @@ import pytest
 from conftest import grid, interior, to_np
 from pydemons.fields import jacobian, jacobian_determinant
 
-GRADIENT_SCALE_BUG = pytest.mark.xfail(reason="gradient returns 2x the derivative, so grad(u) is doubled")
 
 @pytest.mark.parametrize("shape", [(24, 20), (12, 10, 8)])
 def test_det_of_zero_field_is_one(xp, shape):
@@ -27,7 +26,6 @@ def test_det_of_translation_is_one(xp, shape):
     assert np.allclose(to_np(jacobian_determinant(xp.asarray(field))), 1.0)
 
 
-@GRADIENT_SCALE_BUG
 @pytest.mark.parametrize("shape", [(24, 20), (12, 10, 8)])
 def test_det_of_uniform_scaling(xp, shape):
     # u_i = a_i * x_i  ->  det = prod(1 + a_i)
@@ -38,7 +36,6 @@ def test_det_of_uniform_scaling(xp, shape):
     assert np.allclose(det[interior(len(shape), 1)], np.prod([1 + a for a in rates]))
 
 
-@GRADIENT_SCALE_BUG
 def test_det_of_rotation_is_one(xp):
     shape = (24, 24)
     theta = 0.2
@@ -50,7 +47,6 @@ def test_det_of_rotation_is_one(xp):
     assert np.allclose(det[interior(2, 1)], 1.0)
 
 
-@GRADIENT_SCALE_BUG
 def test_det_detects_folding(xp):
     # u_0 = -2 x_0 maps x_0 -> -x_0: a reflection with determinant -1.
     shape = (20, 20)
@@ -68,7 +64,6 @@ def test_det_of_shear_is_one(xp):
     assert np.allclose(det[interior(2, 1)], 1.0)
 
 
-@GRADIENT_SCALE_BUG
 @pytest.mark.parametrize("shape", [(24, 20), (12, 10, 8)])
 def test_jacobian_components(xp, shape):
     # jacobian returns one gradient per component: J[i][k] = d u_i / d x_k.
