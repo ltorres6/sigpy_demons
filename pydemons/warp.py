@@ -17,9 +17,10 @@ def warp(image, field):
     ----------
     image : ndarray, shape ``(*shape)``
     field : ndarray, shape ``(image.ndim, *shape)``
-        Displacement in voxels along each axis. Samples outside the image are 0.
+        Displacement in voxels along each axis. The image is extended past its
+        border with its edge values.
     """
     xp = get_array_module(image, field)
     ndi = get_ndimage(xp)
     coords = identity_grid(image.shape, xp, field.dtype) + field
-    return ndi.map_coordinates(image, coords, order=1, mode="constant", cval=0.0, prefilter=False)
+    return ndi.map_coordinates(image, coords, order=1, mode="nearest", prefilter=False)

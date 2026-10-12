@@ -45,6 +45,15 @@ def test_compose_translations_add(xp, shape):
 
 
 @pytest.mark.parametrize("shape", SHAPES)
+def test_compose_translations_add_at_border(xp, shape):
+    # Sampling past the edge must extend the field, not treat it as zero displacement.
+    a = constant_field(shape, [2.5, -1.5, 1.0])
+    b = constant_field(shape, [-0.75, 2.0, 1.0])
+    out = to_np(compose(xp.asarray(a), xp.asarray(b)))
+    assert np.allclose(out, a + b)
+
+
+@pytest.mark.parametrize("shape", SHAPES)
 def test_compose_samples_second_field_along_first(xp, shape):
     # compose(f1, f2)(x) = f1(x) + f2(x + f1(x)), linearly interpolated.
     f1 = smooth_field(shape, amplitude=2.0, seed=1)

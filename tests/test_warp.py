@@ -48,7 +48,6 @@ def test_matches_scipy_map_coordinates(xp, shape):
     assert np.allclose(out[inner], expected[inner], atol=1e-6)
 
 
-@pytest.mark.xfail(reason="samples outside the image are 0, so outward displacements blacken the border")
 @pytest.mark.parametrize("shape", SHAPES)
 def test_border_is_not_darkened(xp, shape):
     # A constant image stays constant under any warp if the border is extended.

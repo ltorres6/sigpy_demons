@@ -16,7 +16,8 @@ from pydemons.warp import identity_grid
 def compose(field1, field2, diffeomorphic=False, composition="A"):
     """Compose two displacement fields.
 
-    With ``diffeomorphic=False`` this returns ``field1(x) + field2(x + field1(x))``.
+    With ``diffeomorphic=False`` this returns ``field1(x) + field2(x + field1(x))``:
+    apply ``field1`` first, then ``field2``. ``field2`` is edge-extended.
     With ``diffeomorphic=True`` the fields are treated as stationary velocity
     fields and combined with the Baker-Campbell-Hausdorff approximation:
     ``"A"`` is ``v1 + v2`` and ``"B"`` adds the Lie bracket term.
@@ -26,7 +27,7 @@ def compose(field1, field2, diffeomorphic=False, composition="A"):
         ndi = get_ndimage(xp)
         coords = identity_grid(field1.shape[1:], xp, field1.dtype) + field1
         out = xp.stack(
-            [ndi.map_coordinates(c, coords, order=1, mode="constant", cval=0.0, prefilter=False) for c in field2]
+            [ndi.map_coordinates(c, coords, order=1, mode="nearest", prefilter=False) for c in field2]
         )
         return out + field1
     if composition == "A":
