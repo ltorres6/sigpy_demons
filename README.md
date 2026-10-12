@@ -53,7 +53,7 @@ uv run --extra plot python examples/register_synthetic.py [--gpu]
 
 ## Performance
 
-`benchmarks/bench_3d.py` registers a 256×256×128 volume under a smooth
+`benchmarks/bench_3d.py` registers a 256Ã—256Ã—128 volume under a smooth
 synthetic warp (3 levels, 200/100/50 iterations, `tol=0`) on an RTX 4090:
 
 | variant              | float64 | float32 |
@@ -61,7 +61,7 @@ synthetic warp (3 levels, 200/100/50 iterations, `tol=0`) on an RTX 4090:
 | `passive`            |  2.0 s  |  1.0 s  |
 | `inverse_consistent` |  3.8 s  |  2.0 s  |
 
-Mean field error is 0.13–0.14 voxels in both precisions. The same `passive`
+Mean field error is 0.13â€“0.14 voxels in both precisions. The same `passive`
 float32 run takes about 270 s on the CPU (SciPy's ndimage is single-threaded),
 with identical results. With `tol > 0` each
 iteration also computes the energy for the stopping rule, which costs about a
