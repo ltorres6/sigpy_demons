@@ -118,3 +118,28 @@ def test_unsharp_mask_keeps_constant_and_boosts_detail(xp):
     out = to_np(unsharp_mask(xp.asarray(arr), sigma=1.0, amount=1.0))
     assert np.isclose(out.mean(), arr.mean(), atol=1e-3)
     assert out.std() > arr.std()
+
+
+# --------------------------------------------------------------------------- separable smoothing
+
+
+@pytest.mark.parametrize("sigma", [0.5, 1.5, 3.0])
+@pytest.mark.parametrize("shape", [(30, 40), (12, 14, 10)])
+def test_gaussian_smooth_matches_nd_kernel_convolution(xp, sigma, shape):
+    from scipy.ndimage import convolve
+
+    from pydemons.filters import gaussian_smooth
+
+    arr = np.random.default_rng(0).standard_normal(shape)
+    out = to_np(gaussian_smooth(xp.asarray(arr), sigma))
+    expected = convolve(arr, to_np(gaussian_kernel(sigma, ndim=len(shape))), mode="constant")
+    assert np.allclose(out, expected, atol=1e-12)
+
+
+def test_gaussian_smooth_axes_leave_batch_axis_alone(xp):
+    from pydemons.filters import gaussian_smooth
+
+    field = np.random.default_rng(1).standard_normal((3, 10, 12, 8))
+    batched = to_np(gaussian_smooth(xp.asarray(field), 1.0, axes=(1, 2, 3)))
+    each = np.stack([to_np(gaussian_smooth(xp.asarray(c), 1.0)) for c in field])
+    assert np.allclose(batched, each, atol=1e-12)

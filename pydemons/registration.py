@@ -7,10 +7,9 @@ import logging
 from tqdm.auto import tqdm
 
 from pydemons.backend import get_array_module
-from pydemons.convolution import FFTConvolver
 from pydemons.differences import gradient
 from pydemons.fields import compose, exp_field
-from pydemons.filters import gaussian_kernel
+from pydemons.filters import gaussian_smooth
 from pydemons.forces import VARIANTS, demons_force
 from pydemons.resample import zoom
 from pydemons.utils import resize
@@ -118,25 +117,18 @@ class Demons:
     def run(self):
         """Register and return ``(warped_moving, field)`` cropped to the input shape."""
         xp = self.xp
+        spatial_axes = tuple(range(1, self.ndim + 1))
         logger.info("padded shape %s, scales %s, iterations %s", self.padded_shape, self.scales, self.iterations)
 
         for level in range(self.n_levels):
             factor = 2.0 ** -(self.n_levels - level - 1)
             shape = self.level_shapes[level]
-            sigma_diffusion = self.diffusion_sigma
-            sigma_fluid = self.fluid_sigma
-
             fixed = zoom(self.fixed, factor)
             moving = zoom(self.moving, factor)
             fixed_grad = gradient(fixed)
             fixed_grad_sq = xp.sum(fixed_grad**2, axis=0)
             # Displacements are in voxels, so they scale with the resolution.
             field = xp.stack([zoom(c, factor) for c in self.field]) * factor
-
-            if sigma_diffusion > 0.0:
-                smooth_diffusion = FFTConvolver(gaussian_kernel(sigma_diffusion, self.ndim, xp=xp), shape)
-            if sigma_fluid > 0.0:
-                smooth_fluid = FFTConvolver(gaussian_kernel(sigma_fluid, self.ndim, xp=xp), shape)
 
             losses = []
             window = 4 * (self.n_levels - level)
@@ -155,8 +147,8 @@ class Demons:
                         scaling_factor=self.n_levels - level,
                         diffeomorphic=self.diffeomorphic,
                     )
-                    if sigma_fluid > 0.0:
-                        update = xp.stack([smooth_fluid(c) for c in update])
+                    if self.fluid_sigma > 0.0:
+                        update = gaussian_smooth(update, self.fluid_sigma, axes=spatial_axes)
                     field = compose(field, update, diffeomorphic=self.diffeomorphic, composition=self.composition)
 
                     losses.append(float(loss))
@@ -166,8 +158,8 @@ class Demons:
                         if stop < self.tol:
                             break
 
-                    if sigma_diffusion > 0.0:
-                        field = xp.stack([smooth_diffusion(c) for c in field])
+                    if self.diffusion_sigma > 0.0:
+                        field = gaussian_smooth(field, self.diffusion_sigma, axes=spatial_axes)
                     pbar.set_postfix(loss=stop)
                     pbar.update()
 

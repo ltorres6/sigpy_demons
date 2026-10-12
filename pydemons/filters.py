@@ -29,6 +29,22 @@ def gaussian_kernel(sigma=1.0, ndim=1, xp=np):
     return kernel / kernel.sum()
 
 
+def gaussian_smooth(arr, sigma, axes=None):
+    """Separable Gaussian smoothing with zero padding (``mode="constant"``).
+
+    Identical to convolving with ``gaussian_kernel(sigma, ndim)`` but costs
+    one 1D pass per axis. ``axes`` defaults to all axes; pass e.g.
+    ``(1, 2, 3)`` to smooth every component of a 3D field in one call.
+    """
+    xp = get_array_module(arr)
+    ndi = get_ndimage(xp)
+    k1d = gaussian_kernel_1d(sigma, xp=xp)
+    k1d = k1d / k1d.sum()
+    for axis in range(arr.ndim) if axes is None else axes:
+        arr = ndi.correlate1d(arr, k1d, axis=axis, mode="constant", cval=0.0)
+    return arr
+
+
 def normalized_frequencies(n, xp=np):
     """Frequencies in cycles/sample of a centred (``fftshift``-ed) length-``n`` FFT."""
     return xp.fft.fftshift(xp.fft.fftfreq(n))
