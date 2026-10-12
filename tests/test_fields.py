@@ -155,7 +155,6 @@ def test_bracket_of_translations_is_zero(xp, shape):
     assert np.allclose(to_np(lie_bracket(u, v)), 0.0)
 
 
-@pytest.mark.xfail(reason="lie_bracket contracts with the transposed Jacobian and the gradient is 2x")
 @pytest.mark.parametrize("shape", SHAPES)
 def test_bracket_matches_analytic(xp, shape):
     # lie_bracket(u, v) = 0.5 * (Jv u - Ju v). With u = e_0 constant and v_1 = x_0, Jv u = e_1.
@@ -168,3 +167,17 @@ def test_bracket_matches_analytic(xp, shape):
     expected[1] = 0.5
     inner = (slice(None),) + interior(ndim, 1)
     assert np.allclose(out[inner], expected[inner])
+
+
+@pytest.mark.parametrize("seed", [0, 1, 2])
+def test_bracket_improves_bch_approximation(xp, seed):
+    # Applying exp(f1) then exp(f2) is exp(f1 + f2 + lie_bracket(f1, f2)) to second order,
+    # so the bracket term must reduce the error of the first-order approximation.
+    shape = (64, 64)
+    f1 = xp.asarray(smooth_field(shape, 3.0, seed=2 * seed))
+    f2 = xp.asarray(smooth_field(shape, 3.0, seed=2 * seed + 1))
+    exact = to_np(compose(exp_field(f1), exp_field(f2)))
+    first = to_np(exp_field(compose(f1, f2, diffeomorphic=True, composition="A")))
+    second = to_np(exp_field(compose(f1, f2, diffeomorphic=True, composition="B")))
+    inner = (slice(None),) + interior(2, 10)
+    assert np.abs(second - exact)[inner].mean() < 0.5 * np.abs(first - exact)[inner].mean()

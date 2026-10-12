@@ -72,10 +72,14 @@ def jacobian_determinant(field):
 
 
 def lie_bracket(field1, field2):
-    """Half the Lie bracket of two vector fields, as used in the BCH formula."""
+    """Half the Lie bracket term of the BCH formula: ``0.5 * (J2 @ field1 - J1 @ field2)``.
+
+    ``J1`` and ``J2`` are the Jacobians of ``field1`` and ``field2``, so that
+    ``exp(field2) o exp(field1) ~ exp(field1 + field2 + lie_bracket(field1, field2))``.
+    """
     xp = get_array_module(field1, field2)
     j1, j2 = jacobian(field1), jacobian(field2)
     ndim = field1.shape[0]
-    a = xp.stack([sum(j2[k][i] * field1[k] for k in range(ndim)) for i in range(ndim)])
-    b = xp.stack([sum(j1[k][i] * field2[k] for k in range(ndim)) for i in range(ndim)])
+    a = xp.stack([sum(j2[i][k] * field1[k] for k in range(ndim)) for i in range(ndim)])
+    b = xp.stack([sum(j1[i][k] * field2[k] for k in range(ndim)) for i in range(ndim)])
     return 0.5 * (a - b)
