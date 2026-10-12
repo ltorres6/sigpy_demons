@@ -102,8 +102,13 @@ def _blend(xp, flat, base, weights, steps, axis, offset):
     alive until the cyclic garbage collector runs.
     """
     if axis == len(weights):
-        # Gather from a view shifted by ``offset``: no ``base + offset`` array per corner.
-        return xp.take(flat[:, offset:], base, axis=1)
+        # Gather each component from a view shifted by ``offset`` (no ``base + offset``
+        # array per corner) straight into the result: NumPy's take along axis 1 of a
+        # strided view would first copy the whole source.
+        out = xp.empty((flat.shape[0], base.shape[0]), dtype=flat.dtype)
+        for c in range(flat.shape[0]):
+            xp.take(flat[c, offset:], base, out=out[c])
+        return out
     lo = _blend(xp, flat, base, weights, steps, axis + 1, offset)
     hi = _blend(xp, flat, base, weights, steps, axis + 1, offset + steps[axis])
     hi -= lo
