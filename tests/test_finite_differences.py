@@ -56,3 +56,10 @@ def test_laplacian_is_periodic_second_difference(xp):
     w = 2 * np.pi * k / n
     out = to_np(laplacian(xp.asarray(np.sin(w * x))))
     assert np.allclose(out, (2 * np.cos(w) - 2) * np.sin(w * x))
+
+
+@pytest.mark.parametrize("shape", [(1, 5), (2, 7), (3, 4, 2), (9, 1, 6)])
+def test_gradient_matches_periodic_definition_on_short_axes(xp, shape):
+    arr = np.random.default_rng(0).random(shape)
+    expected = np.stack([(np.roll(arr, -1, axis=i) - np.roll(arr, 1, axis=i)) / 2 for i in range(arr.ndim)])
+    assert np.allclose(to_np(gradient(xp.asarray(arr))), expected)
