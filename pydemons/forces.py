@@ -60,15 +60,26 @@ def _slab_force(fixed, warped_rows, grad_rows, field, alpha, scaling_factor, sca
 
 
 def passive_force(
-    fixed, moving, field, alpha, fixed_grad, fixed_grad_sq, scaling_factor=1.0, compute_energy=True, out=None
+    fixed, moving, field, alpha, fixed_grad=None, fixed_grad_sq=None, scaling_factor=1.0, compute_energy=True, out=None
 ):
-    """Thirion's force using the (precomputed) fixed-image gradient."""
+    """Thirion's force, driven by the fixed-image gradient.
+
+    The gradient is computed per slab unless ``fixed_grad`` and
+    ``fixed_grad_sq`` are given (faster, but they cost ``ndim + 1`` images of memory).
+    """
     xp = get_array_module(fixed, field)
     out = xp.empty_like(field) if out is None else out
+
+    def grad_rows(rows):
+        if fixed_grad is not None:
+            return fixed_grad[:, rows], fixed_grad_sq[rows]
+        grad = gradient(fixed, rows)
+        return grad, xp.sum(grad * grad, axis=0)
+
     loss = _slab_force(
         fixed,
         lambda rows: sample_linear(moving[None], field, rows=rows)[0],
-        lambda rows: (fixed_grad[:, rows], fixed_grad_sq[rows]),
+        grad_rows,
         field,
         alpha,
         scaling_factor,
@@ -131,8 +142,9 @@ def demons_force(
         Current displacement (or velocity, if ``diffeomorphic``) field.
     alpha : float
         Step-size control; the update is bounded by ``1 / (2 * alpha)``.
-    fixed_grad, fixed_grad_sq : ndarray
-        ``gradient(fixed)`` and its squared magnitude; required for ``"passive"``.
+    fixed_grad, fixed_grad_sq : ndarray, optional
+        ``gradient(fixed)`` and its squared magnitude, for ``"passive"``. If
+        omitted they are computed per slab, which needs less memory.
     variant : {"passive", "active", "inverse_consistent"}
     diffeomorphic : bool
         If True, ``field`` is a stationary velocity field and the images are

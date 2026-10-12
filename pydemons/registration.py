@@ -7,7 +7,6 @@ import logging
 from tqdm.auto import tqdm
 
 from pydemons.backend import get_array_module
-from pydemons.differences import gradient
 from pydemons.fields import compose, exp_field
 from pydemons.filters import gaussian_smooth
 from pydemons.forces import VARIANTS, demons_force
@@ -130,11 +129,6 @@ class Demons:
             shape = self.level_shapes[level]
             fixed = zoom(self.fixed, factor)
             moving = zoom(self.moving, factor)
-            # Only the passive force uses the fixed-image gradient.
-            fixed_grad = fixed_grad_sq = None
-            if self.variant == "passive":
-                fixed_grad = gradient(fixed)
-                fixed_grad_sq = xp.sum(fixed_grad**2, axis=0)
             # Displacements are in voxels, so they scale with the resolution.
             if level == 0:
                 field = xp.zeros((self.ndim,) + shape, dtype=self.dtype)  # nothing to downsample yet
@@ -155,8 +149,6 @@ class Demons:
                         moving,
                         field,
                         self.alpha,
-                        fixed_grad=fixed_grad,
-                        fixed_grad_sq=fixed_grad_sq,
                         variant=self.variant,
                         scaling_factor=self.n_levels - level,
                         diffeomorphic=self.diffeomorphic,
@@ -182,7 +174,7 @@ class Demons:
                         pbar.set_postfix(rel_change=stop)
                     pbar.update()
 
-            del fixed, moving, fixed_grad, fixed_grad_sq, update
+            del fixed, moving, update
             self.field = xp.stack([zoom(c, 1 / factor) for c in field]) / factor
             del field
 
