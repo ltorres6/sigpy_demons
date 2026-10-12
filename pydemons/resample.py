@@ -23,7 +23,7 @@ def zoom(arr, factor):
     if factor == 1:
         return arr
     if factor < 1:
-        h = butterworth(0.5 * factor, arr.shape, order=2, xp=xp)
+        h = butterworth(0.5 * factor, arr.shape, order=2, xp=xp).astype(arr.dtype)
         arr = xp.real(xp.fft.ifftn(xp.fft.fftn(arr) * xp.fft.ifftshift(h * h)))
         step = 1 / factor
         if math.isclose(step, round(step)):

@@ -55,6 +55,9 @@ class Demons:
         bracket term. Ignored unless ``diffeomorphic``.
     progress : bool
         Show a progress bar per level.
+    dtype : str or dtype
+        Working precision. ``"float32"`` roughly halves run time and memory,
+        especially on GPU, at a small cost in accuracy.
 
     Example
     -------
@@ -75,14 +78,16 @@ class Demons:
         diffeomorphic=False,
         composition="A",
         progress=True,
+        dtype="float64",
     ):
         if variant not in VARIANTS:
             raise ValueError(f"variant must be one of {VARIANTS}, got {variant!r}")
         if composition not in ("A", "B"):
             raise ValueError(f"composition must be 'A' or 'B', got {composition!r}")
         self.xp = get_array_module(fixed, moving)
-        fixed = self.xp.asarray(fixed, dtype=self.xp.float64)
-        moving = self.xp.asarray(moving, dtype=self.xp.float64)
+        self.dtype = self.xp.dtype(dtype)
+        fixed = self.xp.asarray(fixed, dtype=self.dtype)
+        moving = self.xp.asarray(moving, dtype=self.dtype)
 
         # Scale both images by the moving maximum for numerical stability.
         scale = moving.max()
@@ -97,7 +102,7 @@ class Demons:
         self.fixed = resize(fixed, self.padded_shape)
         self.moving = resize(moving, self.padded_shape)
         self.ndim = fixed.ndim
-        self.field = self.xp.zeros((self.ndim,) + self.padded_shape)
+        self.field = self.xp.zeros((self.ndim,) + self.padded_shape, dtype=self.dtype)
         self.level_shapes = [tuple(s // scale for s in self.padded_shape) for scale in self.scales]
         self.alpha = alpha
         self.diffusion_sigma = diffusion_sigma

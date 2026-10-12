@@ -128,3 +128,21 @@ def test_diffeomorphic_run_returns_displacement(variant):
     inner = (slice(None),) + interior(2, 6)
     assert np.allclose(field[inner], exp_field(d.velocity)[inner])
     assert np.allclose(warped, warp(d.moving, field))
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("xp_name", ["numpy", pytest.param("cupy", marks=[pytest.mark.gpu, requires_gpu])])
+@pytest.mark.parametrize("variant", VARIANTS)
+def test_float32_matches_float64(xp_name, variant):
+    import importlib
+
+    xp = importlib.import_module(xp_name)
+    shape = (64, 64)
+    Is = blobs(shape)
+    Im = np.roll(Is, 3, axis=0)
+    d32 = Demons(xp.asarray(Is), xp.asarray(Im), n_levels=2, max_iter=60, tol=0.0, variant=variant,
+                 dtype="float32", progress=False)
+    w32, f32 = d32.run()
+    assert w32.dtype == np.float32 and f32.dtype == np.float32
+    _, f64 = run(Is, Im, variant=variant, max_iter=60)
+    assert np.abs(to_np(f32) - f64).mean() < 1e-3
