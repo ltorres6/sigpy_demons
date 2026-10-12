@@ -21,7 +21,6 @@ def test_gaussian_1d_is_odd_symmetric_and_centred(sigma):
     assert np.argmax(k) == len(k) // 2
 
 
-@pytest.mark.xfail(reason="kernel is truncated at +/-2 sigma (comment says 4), so its variance is too small")
 @pytest.mark.parametrize("sigma", [1.0, 1.5, 3.0])
 def test_gaussian_1d_variance_matches_sigma(sigma):
     assert np.isclose(kernel_variance(to_np(gaussian_kernel_1d(sigma))), sigma**2, rtol=0.02)

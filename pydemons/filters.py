@@ -12,8 +12,8 @@ import numpy as np
 
 
 def gaussian_kernel_1d(sigma=1.0, xp=np):
-    """Unnormalised, odd-length 1D Gaussian with standard deviation ``sigma``."""
-    n = max(math.ceil(4 * sigma) // 2 * 2 + 1, 3)
+    """Unnormalised, odd-length 1D Gaussian with standard deviation ``sigma``, truncated at 4 sigma."""
+    n = 2 * max(math.ceil(4 * sigma), 1) + 1
     x = xp.arange(n, dtype=xp.float64) - (n - 1) / 2
     return xp.exp(-0.5 * (x / sigma) ** 2)
 
