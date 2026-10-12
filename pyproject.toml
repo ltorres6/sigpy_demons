@@ -10,7 +10,6 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "numpy>=1.26",
-    "scipy>=1.11",
     "tqdm>=4.66",
 ]
 
@@ -19,7 +18,8 @@ gpu = ["cupy-cuda13x[ctk]>=13.6"]
 plot = ["matplotlib>=3.8"]
 
 [dependency-groups]
-dev = ["pytest>=8.0", "matplotlib>=3.8"]
+# SciPy is only a reference oracle for tests and a data generator for benchmarks.
+dev = ["pytest>=8.0", "matplotlib>=3.8", "scipy>=1.11"]
 
 [tool.hatch.version]
 path = "pydemons/__init__.py"

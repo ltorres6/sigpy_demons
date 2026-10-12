@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import math
 
-from pydemons.backend import get_array_module, get_ndimage
+from pydemons.backend import get_array_module
 from pydemons.differences import gradient
-from pydemons.warp import displaced_coordinates
+from pydemons.interpolate import sample_linear
 
 
 def compose(field1, field2, diffeomorphic=False, composition="A"):
@@ -23,13 +23,9 @@ def compose(field1, field2, diffeomorphic=False, composition="A"):
     ``"A"`` is ``v1 + v2`` and ``"B"`` adds the Lie bracket term.
     """
     if not diffeomorphic:
-        xp = get_array_module(field1, field2)
-        ndi = get_ndimage(xp)
-        coords = displaced_coordinates(field1)
-        out = xp.stack(
-            [ndi.map_coordinates(c, coords, order=1, mode="nearest", prefilter=False) for c in field2]
-        )
-        return out + field1
+        out = sample_linear(field2, field1)
+        out += field1
+        return out
     if composition == "A":
         return field1 + field2
     if composition == "B":

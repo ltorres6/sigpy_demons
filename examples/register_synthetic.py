@@ -13,21 +13,20 @@ from __future__ import annotations
 import argparse
 
 import numpy as np
-from scipy.ndimage import gaussian_filter, map_coordinates
 
-from pydemons import Demons, is_gpu_available, to_gpu, to_numpy
+from pydemons import Demons, is_gpu_available, to_gpu, to_numpy, warp
+from pydemons.filters import gaussian_smooth
 
 
 def make_pair(shape=(128, 128), max_displacement=4.0, seed=0):
     """Fixed image of smooth blobs, and the same image under a smooth random warp."""
     rng = np.random.default_rng(seed)
-    fixed = gaussian_filter(rng.random(shape), sigma=4)
+    fixed = gaussian_smooth(rng.random(shape), 4, mode="reflect")
     fixed = (fixed - fixed.min()) / (fixed.max() - fixed.min())
-    field = np.stack([gaussian_filter(rng.standard_normal(shape), sigma=16) for _ in shape])
+    field = gaussian_smooth(rng.standard_normal((len(shape),) + shape), 16, axes=range(1, len(shape) + 1), mode="reflect")
     field *= max_displacement / np.abs(field).max()
-    grid = np.mgrid[tuple(slice(0, s) for s in shape)].astype(np.float64)
     # moving(x + field(x)) == fixed(x)  <=>  moving = fixed warped by the inverse field (approximated by -field)
-    moving = map_coordinates(fixed, grid - field, order=1, mode="nearest")
+    moving = warp(fixed, -field)
     return fixed, moving
 
 

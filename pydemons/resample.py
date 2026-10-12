@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import math
 
-from pydemons.backend import get_array_module, get_ndimage, get_signal
+from pydemons.backend import get_array_module
+from pydemons.separable import correlate_along, linear_resample_matrix, matmul_along
 from pydemons.filters import butterworth
 
 # Burt & Adelson's 5-tap binomial smoothing kernel (sigma ~ 1).
@@ -28,10 +29,11 @@ def zoom(arr, factor):
         step = 1 / factor
         if math.isclose(step, round(step)):
             return arr[(slice(None, None, round(step)),) * arr.ndim]
-    oshape = tuple(int(round(s * factor)) for s in arr.shape)
-    axes = [xp.arange(n, dtype=xp.float64) / factor for n in oshape]
-    coords = xp.stack(xp.meshgrid(*axes, indexing="ij"))
-    return get_ndimage(xp).map_coordinates(arr, coords, order=1, mode="nearest", prefilter=False)
+    # Linear interpolation on a regular grid is separable: one small matrix per axis.
+    for axis, n in enumerate(arr.shape):
+        resample = linear_resample_matrix(xp, n, int(round(n * factor)), factor, arr.dtype)
+        arr = matmul_along(arr, resample, axis)
+    return arr
 
 
 def fft_upsample(arr, factor):
@@ -40,19 +42,30 @@ def fft_upsample(arr, factor):
     Exact for periodic signals with no energy at or above the input Nyquist
     frequency.
     """
-    signal = get_signal(get_array_module(arr))
+    xp = get_array_module(arr)
     for axis, n in enumerate(arr.shape):
-        arr = signal.resample(arr, n * factor, axis=axis)
+        m = n * factor
+        spectrum = xp.fft.rfft(arr, axis=axis)
+        shape = list(spectrum.shape)
+        shape[axis] = m // 2 + 1
+        padded = xp.zeros(shape, dtype=spectrum.dtype)
+        keep = [slice(None)] * arr.ndim
+        keep[axis] = slice(0, n // 2 + 1)
+        padded[tuple(keep)] = spectrum[tuple(keep)]
+        if n % 2 == 0:
+            # The input Nyquist term stands for +n/2 and -n/2; split it between them.
+            nyquist = [slice(None)] * arr.ndim
+            nyquist[axis] = n // 2
+            padded[tuple(nyquist)] *= 0.5
+        arr = xp.fft.irfft(padded, n=m, axis=axis) * (m / n)
     return arr
 
 
 def _smooth(arr, gain=1.0):
     """Separable binomial smoothing with half-sample symmetric boundaries."""
-    xp = get_array_module(arr)
-    ndi = get_ndimage(xp)
-    kernel = xp.asarray(_BINOMIAL) * gain
+    kernel = [k * gain for k in _BINOMIAL]
     for axis in range(arr.ndim):
-        arr = ndi.correlate1d(arr, kernel, axis=axis, mode="reflect")
+        arr = correlate_along(arr, kernel, axis, "reflect")
     return arr
 
 

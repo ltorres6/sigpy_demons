@@ -920,8 +920,6 @@ source = { editable = "." }
 dependencies = [
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
-    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
-    { name = "scipy", version = "1.18.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "tqdm" },
 ]
 
@@ -937,6 +935,8 @@ plot = [
 dev = [
     { name = "matplotlib" },
     { name = "pytest" },
+    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "scipy", version = "1.18.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
 ]
 
 [package.metadata]
@@ -944,7 +944,6 @@ requires-dist = [
     { name = "cupy-cuda13x", extras = ["ctk"], marker = "extra == 'gpu'", specifier = ">=13.6" },
     { name = "matplotlib", marker = "extra == 'plot'", specifier = ">=3.8" },
     { name = "numpy", specifier = ">=1.26" },
-    { name = "scipy", specifier = ">=1.11" },
     { name = "tqdm", specifier = ">=4.66" },
 ]
 provides-extras = ["gpu", "plot"]
@@ -953,6 +952,7 @@ provides-extras = ["gpu", "plot"]
 dev = [
     { name = "matplotlib", specifier = ">=3.8" },
     { name = "pytest", specifier = ">=8.0" },
+    { name = "scipy", specifier = ">=1.11" },
 ]
 
 [[package]]
