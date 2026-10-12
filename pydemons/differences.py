@@ -12,3 +12,9 @@ def gradient(arr):
     """
     xp = get_array_module(arr)
     return xp.stack([(xp.roll(arr, -1, axis=i) - xp.roll(arr, 1, axis=i)) / 2 for i in range(arr.ndim)])
+
+
+def laplacian(arr):
+    """Sum of second differences along every axis; boundaries wrap."""
+    xp = get_array_module(arr)
+    return sum(xp.roll(arr, -1, axis=i) + xp.roll(arr, 1, axis=i) - 2 * arr for i in range(arr.ndim))

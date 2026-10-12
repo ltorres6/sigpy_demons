@@ -36,3 +36,23 @@ def test_gradient_is_periodic_central_difference(xp):
     expected = np.sin(w) * np.cos(w * x)
     assert np.allclose(out[0][:, 0], expected)
     assert np.allclose(out[1], 0.0)
+
+
+@pytest.mark.parametrize("shape", [(24, 20), (12, 10, 8)])
+def test_laplacian_of_quadratic(xp, shape):
+    from pydemons.differences import laplacian
+
+    g = grid(shape)
+    out = to_np(laplacian(xp.asarray(sum(g[i] ** 2 for i in range(len(shape))))))
+    assert out.shape == shape
+    assert np.allclose(out[interior(len(shape), 1)], 2.0 * len(shape))
+
+
+def test_laplacian_is_periodic_second_difference(xp):
+    from pydemons.differences import laplacian
+
+    n, k = 32, 3
+    x = np.arange(n, dtype=np.float64)
+    w = 2 * np.pi * k / n
+    out = to_np(laplacian(xp.asarray(np.sin(w * x))))
+    assert np.allclose(out, (2 * np.cos(w) - 2) * np.sin(w * x))
