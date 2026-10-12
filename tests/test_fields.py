@@ -80,7 +80,7 @@ def test_compose_rejects_unknown_type():
         compose(f, f, diffeomorphic=True, composition="C")
 
 
-# --------------------------------------------------------------------------- expfield
+# --------------------------------------------------------------------------- exp_field
 
 
 @pytest.mark.parametrize("shape", SHAPES)
@@ -97,7 +97,6 @@ def test_exp_of_large_translation_is_translation(xp, shape):
     assert np.allclose(out[inner], v[inner])
 
 
-@pytest.mark.xfail(reason="exp_field scales fields with max norm < 0.5 up instead of down (negative n)")
 @pytest.mark.parametrize("shape", SHAPES)
 def test_exp_of_small_translation_is_translation(xp, shape):
     v = constant_field(shape, [0.1, -0.05, 0.02])
@@ -118,21 +117,22 @@ def test_exp_inverse_is_exp_of_negation(xp, amplitude):
     assert np.abs(residual[inner]).max() < 0.05 * amplitude
 
 
-@pytest.mark.xfail(reason="exp_field scales fields with max norm < 0.5 up instead of down (negative n)")
-def test_exp_of_linear_field_matches_flow(xp):
-    # dx/dt = a (x - c) integrates to x(1) - x(0) = (x - c)(e^a - 1).
-    shape, a = (40, 40), 0.02
+@pytest.mark.parametrize("a", [0.02, 0.1, 0.2])
+def test_exp_of_linear_field_matches_flow(xp, a):
+    # dx/dt = a (x - c) integrates to x(1) - x(0) = (x - c)(e^a - 1). Scaling and squaring
+    # with steps of at most 0.5 voxel is first-order accurate: about 1% relative error here.
+    shape = (40, 40)
     g = grid(shape)
     v = np.zeros((2,) + shape)
     v[0] = a * (g[0] - 20)
     out = to_np(exp_field(xp.asarray(v)))
     expected = (g[0] - 20) * np.expm1(a)
     inner = interior(2, 4)
-    assert np.abs(out[0][inner] - expected[inner]).max() < 2e-3
+    assert np.abs(out[0][inner] - expected[inner]).max() < 0.02 * np.abs(expected[inner]).max()
     assert np.abs(out[1][inner]).max() < 1e-6
 
 
-# --------------------------------------------------------------------------- LieBracket
+# --------------------------------------------------------------------------- lie_bracket
 
 
 @pytest.mark.parametrize("shape", SHAPES)

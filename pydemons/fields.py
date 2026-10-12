@@ -40,8 +40,9 @@ def compose(field1, field2, diffeomorphic=False, composition="A"):
 def exp_field(velocity):
     """Exponential of a stationary velocity field by scaling and squaring."""
     xp = get_array_module(velocity)
+    # Smallest n >= 0 with max|v| / 2**n <= 0.5 voxel.
     n = 2 * float(xp.max(xp.sqrt(xp.sum(velocity**2, axis=0))))
-    n = 0 if not math.isfinite(n) or n <= 0.0 else int(math.ceil(math.log2(n)))
+    n = 0 if not math.isfinite(n) or n <= 1.0 else int(math.ceil(math.log2(n)))
     out = velocity * 2.0**-n
     for _ in range(n):
         out = compose(out, out)
