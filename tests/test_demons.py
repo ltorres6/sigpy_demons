@@ -31,6 +31,12 @@ def test_pyramid_geometry(n_levels, shape):
     assert d.iterations == [80 // 2**i for i in range(n_levels)]
 
 
+@pytest.mark.parametrize("option", [{"variant": "nonsense"}, {"composition": "C", "diffeomorphic": True}])
+def test_invalid_options_raise_on_construction(option):
+    with pytest.raises(ValueError):
+        Demons(np.ones((8, 8)), np.ones((8, 8)), **option)
+
+
 # --------------------------------------------------------------------------- end-to-end
 
 

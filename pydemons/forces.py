@@ -15,6 +15,7 @@ from pydemons.fields import exp_field
 from pydemons.warp import warp
 
 DENOMINATOR_THRESHOLD = 1e-9
+VARIANTS = ("passive", "active", "inverse_consistent")
 
 
 def _force(diff, grad, grad_sq, alpha, scaling_factor, scale=1.0):
@@ -81,9 +82,9 @@ def demons_force(
     """
     if variant == "passive":
         return passive_force(fixed, moving, field, alpha, fixed_grad, fixed_grad_sq, scaling_factor)
-    elif variant == "active":
+    if variant == "active":
         return active_force(fixed, moving, field, alpha, scaling_factor)
-    elif variant == "inverse_consistent":
+    if variant == "inverse_consistent":
         if diffeomorphic is True:
             inverse_field = exp_field(-1 * field)
             field = exp_field(field)
@@ -92,6 +93,4 @@ def demons_force(
             inverse_field = -1 * field
         update2, loss2 = inverse_consistent_force(moving, fixed, inverse_field, alpha, scaling_factor)
         return (update - update2) * 0.5, (loss + loss2) * 0.5
-    else:
-        print("variant not implemented yet.")
-        return
+    raise ValueError(f"variant must be one of {VARIANTS}, got {variant!r}")

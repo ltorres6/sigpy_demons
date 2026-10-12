@@ -78,7 +78,6 @@ def test_update_depends_on_moving_image_only_through_warp(xp, update_fn):
     assert np.allclose(to_np(a)[inner], to_np(b)[inner], atol=1e-6)
 
 
-@pytest.mark.xfail(reason="unknown variant prints a message and returns None")
 def test_unknown_variant_raises():
     img = np.zeros((8, 8))
     with pytest.raises(ValueError):

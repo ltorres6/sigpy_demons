@@ -11,7 +11,7 @@ from pydemons.convolution import FFTConvolver
 from pydemons.differences import gradient
 from pydemons.fields import compose
 from pydemons.filters import gaussian_kernel
-from pydemons.forces import demons_force
+from pydemons.forces import VARIANTS, demons_force
 from pydemons.resample import zoom
 from pydemons.utils import resize
 from pydemons.warp import warp
@@ -75,6 +75,10 @@ class Demons:
         composition="A",
         progress=True,
     ):
+        if variant not in VARIANTS:
+            raise ValueError(f"variant must be one of {VARIANTS}, got {variant!r}")
+        if composition not in ("A", "B"):
+            raise ValueError(f"composition must be 'A' or 'B', got {composition!r}")
         self.xp = get_array_module(fixed, moving)
         fixed = self.xp.asarray(fixed, dtype=self.xp.float64)
         moving = self.xp.asarray(moving, dtype=self.xp.float64)

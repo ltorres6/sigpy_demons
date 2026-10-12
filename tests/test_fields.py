@@ -73,7 +73,6 @@ def test_compose_log_domain_second_order_adds_bracket(xp, shape):
     assert np.allclose(to_np(out), to_np(expected))
 
 
-@pytest.mark.xfail(reason="unknown compositionType falls through to UnboundLocalError")
 def test_compose_rejects_unknown_type():
     f = np.zeros((2, 8, 8))
     with pytest.raises(ValueError):

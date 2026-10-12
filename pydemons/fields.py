@@ -21,7 +21,7 @@ def compose(field1, field2, diffeomorphic=False, composition="A"):
     fields and combined with the Baker-Campbell-Hausdorff approximation:
     ``"A"`` is ``v1 + v2`` and ``"B"`` adds the Lie bracket term.
     """
-    if diffeomorphic is False:
+    if not diffeomorphic:
         xp = get_array_module(field1, field2)
         ndi = get_ndimage(xp)
         coords = identity_grid(field1.shape[1:], xp, field1.dtype) + field1
@@ -29,12 +29,11 @@ def compose(field1, field2, diffeomorphic=False, composition="A"):
             [ndi.map_coordinates(c, coords, order=1, mode="constant", cval=0.0, prefilter=False) for c in field2]
         )
         return out + field1
-    elif diffeomorphic is True:
-        if composition == "A":
-            out = field1 + field2
-        elif composition == "B":
-            out = field1 + field2 + lie_bracket(field1, field2)
-        return out
+    if composition == "A":
+        return field1 + field2
+    if composition == "B":
+        return field1 + field2 + lie_bracket(field1, field2)
+    raise ValueError(f"composition must be 'A' or 'B', got {composition!r}")
 
 
 def exp_field(velocity):
