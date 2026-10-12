@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import math
+
 from pydemons.backend import get_array_module
 from pydemons.fields import jacobian, jacobian_determinant
+from pydemons.interpolate import slabs
 
 
 def energy(diff, field, alpha):
@@ -12,9 +15,17 @@ def energy(diff, field, alpha):
     ``mean(diff**2) + alpha**2 * mean(det(I + grad(field))**2)``.
     """
     xp = get_array_module(diff, field)
-    similarity = xp.mean(diff**2)
-    regularization = xp.mean(jacobian_determinant(field) ** 2) * alpha**2
-    return similarity + regularization
+    return xp.mean(diff**2) + regularization(field, alpha)
+
+
+def regularization(field, alpha):
+    """``alpha**2 * mean(det(I + grad(field))**2)``, computed slab by slab to bound memory."""
+    xp = get_array_module(field)
+    total = 0.0
+    for rows in slabs(field.shape[1:]):
+        det = jacobian_determinant(field, rows)
+        total = total + xp.sum(det * det)
+    return total * alpha**2 / math.prod(field.shape[1:])
 
 
 def rmse(diff):

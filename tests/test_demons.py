@@ -155,6 +155,6 @@ def test_zero_tolerance_skips_energy(monkeypatch):
     def fail(*args, **kwargs):
         raise AssertionError("energy computed with tol=0")
 
-    monkeypatch.setattr(pydemons.forces, "energy", fail)
+    monkeypatch.setattr(pydemons.forces, "regularization", fail)
     Is = blobs((32, 32))
     Demons(Is, np.roll(Is, 1, axis=0), n_levels=2, max_iter=10, tol=0.0, progress=False).run()

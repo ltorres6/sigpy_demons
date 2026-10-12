@@ -30,21 +30,35 @@ def gaussian_kernel(sigma=1.0, ndim=1, xp=np):
     return kernel / kernel.sum()
 
 
-def gaussian_smooth(arr, sigma, axes=None, mode="constant"):
+def gaussian_smooth(arr, sigma, axes=None, mode="constant", out=None):
     """Separable Gaussian smoothing.
 
     Identical to convolving with ``gaussian_kernel(sigma, ndim)``, applied as
     one banded matrix multiply per axis. ``axes`` defaults to all axes; pass
     e.g. ``(1, 2, 3)`` to smooth every component of a 3D field in one call.
     ``mode`` is ``"constant"`` (zero padding) or ``"reflect"`` (half-sample
-    symmetric).
+    symmetric). ``out`` receives the result and may be ``arr`` itself.
+
+    Leading axes that are not smoothed (such as a field's component axis) are
+    processed one entry at a time, so temporaries are the size of one entry.
     """
     xp = get_array_module(arr)
+    axes = tuple(range(arr.ndim)) if axes is None else tuple(axes)
+    if axes and 0 not in axes:
+        out = xp.empty_like(arr) if out is None else out
+        inner = tuple(a - 1 for a in axes)
+        for i in range(arr.shape[0]):
+            # Each entry only reads itself, so writing it back in place is safe.
+            out[i] = gaussian_smooth(arr[i], sigma, inner, mode)
+        return out
     k1d = gaussian_kernel_1d(sigma)
     k1d = k1d / k1d.sum()
-    for axis in range(arr.ndim) if axes is None else axes:
+    for axis in axes:
         arr = correlate_along(arr, k1d, axis, mode)
-    return arr
+    if out is None:
+        return arr
+    out[...] = arr
+    return out
 
 
 def normalized_frequencies(n, xp=np):

@@ -189,3 +189,17 @@ def test_bracket_improves_bch_approximation(xp, seed):
     second = to_np(exp_field(compose(f1, f2, diffeomorphic=True, composition="B")))
     inner = (slice(None),) + interior(2, 10)
     assert np.abs(second - exact)[inner].mean() < 0.5 * np.abs(first - exact)[inner].mean()
+
+
+@pytest.mark.parametrize("diffeomorphic,composition", [(False, "A"), (True, "A"), (True, "B")])
+@pytest.mark.parametrize("shape", SHAPES)
+def test_compose_in_place_into_first_field(xp, monkeypatch, shape, diffeomorphic, composition):
+    import pydemons.interpolate
+
+    monkeypatch.setattr(pydemons.interpolate, "SLAB_VOXELS", 40)  # many slabs
+    f1 = xp.asarray(smooth_field(shape, 3.0, seed=20))
+    f2 = xp.asarray(smooth_field(shape, 1.0, seed=21))
+    expected = to_np(compose(f1, f2, diffeomorphic=diffeomorphic, composition=composition))
+    in_place = f1.copy()
+    assert compose(in_place, f2, diffeomorphic=diffeomorphic, composition=composition, out=in_place) is in_place
+    assert np.allclose(to_np(in_place), expected, atol=1e-12)

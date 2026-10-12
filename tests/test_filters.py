@@ -143,3 +143,17 @@ def test_gaussian_smooth_axes_leave_batch_axis_alone(xp):
     batched = to_np(gaussian_smooth(xp.asarray(field), 1.0, axes=(1, 2, 3)))
     each = np.stack([to_np(gaussian_smooth(xp.asarray(c), 1.0)) for c in field])
     assert np.allclose(batched, each, atol=1e-12)
+
+
+@pytest.mark.parametrize("axes", [None, (1, 2), (1,), (0, 1, 2)])
+def test_gaussian_smooth_out_and_in_place(xp, axes):
+    from pydemons.filters import gaussian_smooth
+
+    arr = xp.asarray(np.random.default_rng(3).random((3, 70, 40)))
+    expected = to_np(gaussian_smooth(arr, 1.5, axes=axes))
+    out = xp.full(arr.shape, np.nan)
+    assert gaussian_smooth(arr, 1.5, axes=axes, out=out) is out
+    assert np.allclose(to_np(out), expected)
+    in_place = arr.copy()
+    assert gaussian_smooth(in_place, 1.5, axes=axes, out=in_place) is in_place
+    assert np.allclose(to_np(in_place), expected)

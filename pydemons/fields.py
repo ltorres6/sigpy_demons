@@ -10,10 +10,10 @@ import math
 
 from pydemons.backend import get_array_module
 from pydemons.differences import gradient
-from pydemons.interpolate import sample_linear
+from pydemons.interpolate import sample_linear, slabs
 
 
-def compose(field1, field2, diffeomorphic=False, composition="A"):
+def compose(field1, field2, diffeomorphic=False, composition="A", out=None):
     """Compose two displacement fields.
 
     With ``diffeomorphic=False`` this returns ``field1(x) + field2(x + field1(x))``:
@@ -21,15 +21,25 @@ def compose(field1, field2, diffeomorphic=False, composition="A"):
     With ``diffeomorphic=True`` the fields are treated as stationary velocity
     fields and combined with the Baker-Campbell-Hausdorff approximation:
     ``"A"`` is ``v1 + v2`` and ``"B"`` adds the Lie bracket term.
+    ``out``, if given, receives the result. It may be ``field1`` itself (the
+    displacement composition is computed slab by slab, and each slab only reads
+    ``field1`` at its own rows), but must not overlap ``field2``.
     """
+    xp = get_array_module(field1, field2)
     if not diffeomorphic:
-        out = sample_linear(field2, field1)
-        out += field1
+        out = xp.empty_like(field1) if out is None else out
+        for rows in slabs(field1.shape[1:]):
+            part = sample_linear(field2, field1, rows=rows)
+            part += field1[:, rows]
+            out[:, rows] = part
         return out
     if composition == "A":
-        return field1 + field2
+        return xp.add(field1, field2, out=out)
     if composition == "B":
-        return field1 + field2 + lie_bracket(field1, field2)
+        bracket = lie_bracket(field1, field2)  # before ``out`` (possibly field1) is overwritten
+        out = xp.add(field1, field2, out=out)
+        out += bracket
+        return out
     raise ValueError(f"composition must be 'A' or 'B', got {composition!r}")
 
 
@@ -45,15 +55,18 @@ def exp_field(velocity):
     return out
 
 
-def jacobian(field):
-    """Spatial derivatives of each component: ``J[i][k] = d field_i / d x_k``."""
-    return [gradient(component) for component in field]
+def jacobian(field, rows=None):
+    """Spatial derivatives of each component: ``J[i][k] = d field_i / d x_k``.
+
+    ``rows`` limits the result to a slice of the first spatial axis.
+    """
+    return [gradient(component, rows) for component in field]
 
 
-def jacobian_determinant(field):
-    """Determinant of ``I + grad(field)`` at every voxel."""
+def jacobian_determinant(field, rows=None):
+    """Determinant of ``I + grad(field)`` at every voxel (or only ``rows`` of the first axis)."""
     ndim = field.shape[0]
-    a = jacobian(field)
+    a = jacobian(field, rows)
     for i in range(ndim):
         a[i][i] = a[i][i] + 1
     if ndim == 2:
