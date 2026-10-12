@@ -133,7 +133,10 @@ class Demons:
             fixed_grad = gradient(fixed)
             fixed_grad_sq = xp.sum(fixed_grad**2, axis=0)
             # Displacements are in voxels, so they scale with the resolution.
-            field = xp.stack([zoom(c, factor) for c in self.field]) * factor
+            if level == 0:
+                field = xp.zeros((self.ndim,) + shape, dtype=self.dtype)  # nothing to downsample yet
+            else:
+                field = xp.stack([zoom(c, factor) for c in self.field]) * factor
 
             losses = []
             window = 4 * (self.n_levels - level)

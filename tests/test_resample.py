@@ -103,3 +103,13 @@ def test_laplacian_pyramid_reconstructs_exactly(xp, shape):
     pyr = laplacian_pyramid(xp.asarray(arr), 4)
     assert len(pyr) == 4
     assert np.allclose(to_np(reconstruct_laplacian_pyramid(pyr)), arr)
+
+
+@pytest.mark.parametrize("shape", [(32, 30), (15, 13), (16, 13, 12), (9, 10, 11)])
+def test_downsample_matches_centred_butterworth_definition(xp, shape):
+    from pydemons.filters import butterworth
+
+    arr = np.random.default_rng(7).random(shape)
+    h = butterworth(0.25, shape, order=2)
+    filtered = np.real(np.fft.ifftn(np.fft.fftn(arr) * np.fft.ifftshift(h * h)))
+    assert np.allclose(to_np(zoom(xp.asarray(arr), 0.5)), filtered[(slice(None, None, 2),) * len(shape)], atol=1e-12)
