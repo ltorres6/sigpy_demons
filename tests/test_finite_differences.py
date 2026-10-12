@@ -1,14 +1,10 @@
 import numpy as np
 import pytest
 
-import finiteDifferences as fd
 from conftest import grid, interior, to_np
+from pydemons.differences import gradient
 
-GRADIENT_SCALE_BUG = pytest.mark.xfail(reason="CentralDifference returns f(x+1)-f(x-1) without dividing by 2")
-
-
-def gradient(arr):
-    return fd.CentralDifference(arr.shape) * arr
+GRADIENT_SCALE_BUG = pytest.mark.xfail(reason="gradient returns f(x+1)-f(x-1) without dividing by 2")
 
 
 @pytest.mark.parametrize("shape", [(24, 20), (12, 10, 8)])

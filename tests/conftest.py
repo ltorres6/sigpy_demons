@@ -29,16 +29,10 @@ GPU_AVAILABLE = _gpu_available()
 requires_gpu = pytest.mark.skipif(not GPU_AVAILABLE, reason="CuPy/CUDA not available")
 
 
-@pytest.fixture(params=[-1, pytest.param(0, marks=[pytest.mark.gpu, requires_gpu])], ids=["cpu", "gpu"])
-def device(request):
-    """Compute device in the legacy sigpy convention (-1 = CPU, 0 = first GPU)."""
-    return request.param
-
-
-@pytest.fixture
-def xp(device):
-    """Array module matching ``device``."""
-    if device == -1:
+@pytest.fixture(params=["cpu", pytest.param("gpu", marks=[pytest.mark.gpu, requires_gpu])])
+def xp(request):
+    """Array module to build inputs with; pydemons follows the inputs' device."""
+    if request.param == "cpu":
         return np
     import cupy
 
@@ -47,9 +41,9 @@ def xp(device):
 
 def to_np(arr):
     """Return ``arr`` as a NumPy array regardless of where it lives."""
-    if hasattr(arr, "get"):
-        return arr.get()
-    return np.asarray(arr)
+    from pydemons.backend import to_numpy
+
+    return to_numpy(arr)
 
 
 def interior(ndim: int, margin: int = 6) -> tuple[slice, ...]:

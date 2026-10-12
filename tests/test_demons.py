@@ -5,16 +5,15 @@ import numpy as np
 import pytest
 
 from conftest import blobs, interior, requires_gpu, to_np
-from demons import Demons
+from pydemons import Demons
 
-VARIANTS = ["passive", "active", "inverseConsistent"]
+VARIANTS = ["passive", "active", "inverse_consistent"]
 
 
-def run(Is, Im, device=-1, **kwargs):
-    opts = dict(nLevels=2, max_iter=200, diffusionSigmas=1.0, fluidSigmas=1.0, cThresh=0.0, device=device)
+def run(Is, Im, xp=np, **kwargs):
+    opts = dict(n_levels=2, max_iter=200, diffusion_sigma=1.0, fluid_sigma=1.0, tol=0.0, progress=False)
     opts.update(kwargs)
-    warped, field = Demons(Is, Im, **opts).run()
-    plt.close("all")
+    warped, field = Demons(xp.asarray(Is), xp.asarray(Im), **opts).run()
     return to_np(warped), to_np(field)
 
 
@@ -24,11 +23,11 @@ def run(Is, Im, device=-1, **kwargs):
 @pytest.mark.parametrize("n_levels", [1, 3, 4])
 @pytest.mark.parametrize("shape", [(50, 37), (20, 33, 17)])
 def test_pyramid_geometry(n_levels, shape):
-    d = Demons(np.ones(shape), np.ones(shape), nLevels=n_levels, max_iter=80)
-    assert all(p % 2**n_levels == 0 and p >= s + 40 for p, s in zip(d.paddedShape, shape))
+    d = Demons(np.ones(shape), np.ones(shape), n_levels=n_levels, max_iter=80)
+    assert all(p % 2**n_levels == 0 and p >= s + 40 for p, s in zip(d.padded_shape, shape))
     assert d.scales == [2 ** (n_levels - 1 - i) for i in range(n_levels)]
-    assert d.oshapes[-1] == d.paddedShape
-    assert all(o == tuple(p // s for p in d.paddedShape) for o, s in zip(d.oshapes, d.scales))
+    assert d.level_shapes[-1] == d.padded_shape
+    assert all(o == tuple(p // s for p in d.padded_shape) for o, s in zip(d.level_shapes, d.scales))
     assert d.iterations == [80 // 2**i for i in range(n_levels)]
 
 
@@ -76,18 +75,17 @@ def test_fluid_sigma_changes_result():
     shape = (64, 64)
     Is = blobs(shape)
     Im = np.roll(Is, 3, axis=0)
-    _, a = run(Is, Im, fluidSigmas=0.0, max_iter=50)
-    _, b = run(Is, Im, fluidSigmas=3.0, max_iter=50)
+    _, a = run(Is, Im, fluid_sigma=0.0, max_iter=50)
+    _, b = run(Is, Im, fluid_sigma=3.0, max_iter=50)
     assert not np.allclose(a, b)
 
 
 @pytest.mark.slow
-@pytest.mark.xfail(reason="run() always opens five figures")
 def test_run_does_not_plot():
     shape = (32, 32)
     Is = blobs(shape)
     plt.close("all")
-    Demons(Is, np.roll(Is, 1, axis=0), nLevels=1, max_iter=5).run()
+    Demons(Is, np.roll(Is, 1, axis=0), n_levels=1, max_iter=5, progress=False).run()
     opened = len(plt.get_fignums())
     plt.close("all")
     assert opened == 0
@@ -102,7 +100,10 @@ def test_gpu_matches_cpu(variant):
     Is = blobs(shape)
     Im = np.roll(Is, 3, axis=0)
     w_cpu, f_cpu = run(Is, Im, variant=variant, max_iter=60)
-    w_gpu, f_gpu = run(Is, Im, variant=variant, max_iter=60, device=0)
+    import cupy
+
+    w_gpu, f_gpu = run(Is, Im, xp=cupy, variant=variant, max_iter=60)
+    w_gpu, f_gpu = to_np(w_gpu), to_np(f_gpu)
     # GPU runs in single precision; hard intensity thresholds let tiny differences flip a few voxels.
     assert np.abs(f_cpu - f_gpu).mean() < 1e-3 and np.abs(f_cpu - f_gpu).max() < 0.05
     assert np.abs(w_cpu - w_gpu).mean() < 1e-3

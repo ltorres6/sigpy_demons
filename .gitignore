@@ -8,3 +8,4 @@ toeplitzConvolve.py
 testCircshift.py
 .venv/
 .pytest_cache/
+.vscode/
