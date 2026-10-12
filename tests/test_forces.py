@@ -103,3 +103,17 @@ def test_diffeomorphic_force_warps_by_exponential(xp, variant):
         b, loss_b = forces.demons_force(xp.asarray(img), xp.asarray(moving), exp_field(v), 2.0, **common)
     assert np.allclose(to_np(a), to_np(b))
     assert np.isclose(float(loss_a), float(loss_b))
+
+
+@pytest.mark.parametrize("variant", VARIANTS)
+def test_energy_can_be_skipped(xp, variant):
+    shape = (32, 32)
+    img = xp.asarray(blobs(shape))
+    moving = xp.asarray(np.roll(blobs(shape), 1, axis=0))
+    T = xp.asarray(smooth_field(shape, 1.0, seed=14))
+    dS = gradient(img)
+    common = dict(fixed_grad=dS, fixed_grad_sq=(dS**2).sum(axis=0), variant=variant)
+    a, loss_a = forces.demons_force(img, moving, T, 2.0, **common)
+    b, loss_b = forces.demons_force(img, moving, T, 2.0, compute_energy=False, **common)
+    assert loss_b is None and np.isfinite(float(loss_a))
+    assert np.array_equal(to_np(a), to_np(b))

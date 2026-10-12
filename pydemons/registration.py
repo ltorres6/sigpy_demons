@@ -151,21 +151,25 @@ class Demons:
                         variant=self.variant,
                         scaling_factor=self.n_levels - level,
                         diffeomorphic=self.diffeomorphic,
+                        compute_energy=self.tol > 0,
                     )
                     if self.fluid_sigma > 0.0:
                         update = gaussian_smooth(update, self.fluid_sigma, axes=spatial_axes)
                     field = compose(field, update, diffeomorphic=self.diffeomorphic, composition=self.composition)
 
-                    losses.append(float(loss))
-                    if it > window:
-                        previous = sum(losses[it - window - 1 : it - 1]) / window
-                        stop = abs((losses[it] - previous) / previous)
-                        if stop < self.tol:
-                            break
+                    # The energy is only computed (and the GPU only synchronised) when tol > 0.
+                    if loss is not None:
+                        losses.append(float(loss))
+                        if it > window:
+                            previous = sum(losses[it - window - 1 : it - 1]) / window
+                            stop = abs((losses[it] - previous) / previous)
+                            if stop < self.tol:
+                                break
 
                     if self.diffusion_sigma > 0.0:
                         field = gaussian_smooth(field, self.diffusion_sigma, axes=spatial_axes)
-                    pbar.set_postfix(loss=stop)
+                    if loss is not None:
+                        pbar.set_postfix(rel_change=stop)
                     pbar.update()
 
             self.field = xp.stack([zoom(c, 1 / factor) for c in field]) / factor

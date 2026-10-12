@@ -32,28 +32,35 @@ def _force(diff, grad, grad_sq, alpha, scaling_factor, scale=1.0):
     return xp.where(invalid, 0.0, update)
 
 
-def passive_force(fixed, moving, field, alpha, fixed_grad, fixed_grad_sq, scaling_factor=1.0):
+def _energy(diff, field, alpha, compute_energy):
+    return energy(diff, field, alpha) if compute_energy else None
+
+
+def passive_force(fixed, moving, field, alpha, fixed_grad, fixed_grad_sq, scaling_factor=1.0, compute_energy=True):
     """Thirion's force using the (precomputed) fixed-image gradient."""
     diff = fixed - warp(moving, field)
-    return _force(diff, fixed_grad, fixed_grad_sq, alpha, scaling_factor), energy(diff, field, alpha)
+    update = _force(diff, fixed_grad, fixed_grad_sq, alpha, scaling_factor)
+    return update, _energy(diff, field, alpha, compute_energy)
 
 
-def active_force(fixed, moving, field, alpha, scaling_factor=1.0):
+def active_force(fixed, moving, field, alpha, scaling_factor=1.0, compute_energy=True):
     """Force driven by the gradient of the warped moving image."""
     xp = get_array_module(fixed, moving)
     warped = warp(moving, field)
     grad = gradient(warped)
     diff = fixed - warped
-    return _force(diff, grad, xp.sum(grad**2, axis=0), alpha, scaling_factor), energy(diff, field, alpha)
+    update = _force(diff, grad, xp.sum(grad**2, axis=0), alpha, scaling_factor)
+    return update, _energy(diff, field, alpha, compute_energy)
 
 
-def inverse_consistent_force(fixed, moving, field, alpha, scaling_factor=1.0):
+def inverse_consistent_force(fixed, moving, field, alpha, scaling_factor=1.0, compute_energy=True):
     """Force driven by the sum of the fixed and warped-moving gradients."""
     xp = get_array_module(fixed, moving)
     warped = warp(moving, field)
     grad = gradient(fixed) + gradient(warped)
     diff = fixed - warped
-    return _force(diff, grad, xp.sum(grad**2, axis=0), alpha, scaling_factor, scale=2.0), energy(diff, field, alpha)
+    update = _force(diff, grad, xp.sum(grad**2, axis=0), alpha, scaling_factor, scale=2.0)
+    return update, _energy(diff, field, alpha, compute_energy)
 
 
 def demons_force(
@@ -67,6 +74,7 @@ def demons_force(
     variant="passive",
     scaling_factor=1.0,
     diffeomorphic=False,
+    compute_energy=True,
 ):
     """Update field and energy for one demons iteration.
 
@@ -84,19 +92,21 @@ def demons_force(
     diffeomorphic : bool
         If True, ``field`` is a stationary velocity field and the images are
         compared under its exponential.
+    compute_energy : bool
+        If False, skip the (relatively expensive) energy and return ``None`` for it.
     """
     if diffeomorphic:
         if variant == "inverse_consistent":
             inverse_field = exp_field(-field)
         field = exp_field(field)
     if variant == "passive":
-        return passive_force(fixed, moving, field, alpha, fixed_grad, fixed_grad_sq, scaling_factor)
+        return passive_force(fixed, moving, field, alpha, fixed_grad, fixed_grad_sq, scaling_factor, compute_energy)
     if variant == "active":
-        return active_force(fixed, moving, field, alpha, scaling_factor)
+        return active_force(fixed, moving, field, alpha, scaling_factor, compute_energy)
     if variant == "inverse_consistent":
-        update, loss = inverse_consistent_force(fixed, moving, field, alpha, scaling_factor)
+        update, loss = inverse_consistent_force(fixed, moving, field, alpha, scaling_factor, compute_energy)
         if inverse_field is None:
             inverse_field = -1 * field
-        update2, loss2 = inverse_consistent_force(moving, fixed, inverse_field, alpha, scaling_factor)
-        return (update - update2) * 0.5, (loss + loss2) * 0.5
+        update2, loss2 = inverse_consistent_force(moving, fixed, inverse_field, alpha, scaling_factor, compute_energy)
+        return (update - update2) * 0.5, None if loss is None else (loss + loss2) * 0.5
     raise ValueError(f"variant must be one of {VARIANTS}, got {variant!r}")

@@ -146,3 +146,15 @@ def test_float32_matches_float64(xp_name, variant):
     assert w32.dtype == np.float32 and f32.dtype == np.float32
     _, f64 = run(Is, Im, variant=variant, max_iter=60)
     assert np.abs(to_np(f32) - f64).mean() < 1e-3
+
+
+def test_zero_tolerance_skips_energy(monkeypatch):
+    # With tol=0 the energy only fed the stopping rule, so it must not be computed.
+    import pydemons.forces
+
+    def fail(*args, **kwargs):
+        raise AssertionError("energy computed with tol=0")
+
+    monkeypatch.setattr(pydemons.forces, "energy", fail)
+    Is = blobs((32, 32))
+    Demons(Is, np.roll(Is, 1, axis=0), n_levels=2, max_iter=10, tol=0.0, progress=False).run()
