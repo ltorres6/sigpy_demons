@@ -10,7 +10,7 @@ import math
 
 from pydemons.backend import get_array_module, get_ndimage
 from pydemons.differences import gradient
-from pydemons.warp import identity_grid
+from pydemons.warp import displaced_coordinates
 
 
 def compose(field1, field2, diffeomorphic=False, composition="A"):
@@ -25,7 +25,7 @@ def compose(field1, field2, diffeomorphic=False, composition="A"):
     if not diffeomorphic:
         xp = get_array_module(field1, field2)
         ndi = get_ndimage(xp)
-        coords = identity_grid(field1.shape[1:], xp, field1.dtype) + field1
+        coords = displaced_coordinates(field1)
         out = xp.stack(
             [ndi.map_coordinates(c, coords, order=1, mode="nearest", prefilter=False) for c in field2]
         )

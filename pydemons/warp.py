@@ -5,9 +5,14 @@ from __future__ import annotations
 from pydemons.backend import get_array_module, get_ndimage
 
 
-def identity_grid(shape, xp, dtype=None):
-    """Voxel coordinates of shape ``(len(shape), *shape)``."""
-    return xp.stack(xp.meshgrid(*(xp.arange(s, dtype=dtype or xp.float64) for s in shape), indexing="ij"))
+def displaced_coordinates(field):
+    """Sample coordinates ``x + field(x)``, shape ``field.shape``."""
+    xp = get_array_module(field)
+    ndim = field.shape[0]
+    coords = field.copy()
+    for i, n in enumerate(field.shape[1:]):
+        coords[i] += xp.arange(n, dtype=field.dtype).reshape((n,) + (1,) * (ndim - 1 - i))
+    return coords
 
 
 def warp(image, field):
@@ -22,5 +27,4 @@ def warp(image, field):
     """
     xp = get_array_module(image, field)
     ndi = get_ndimage(xp)
-    coords = identity_grid(image.shape, xp, field.dtype) + field
-    return ndi.map_coordinates(image, coords, order=1, mode="nearest", prefilter=False)
+    return ndi.map_coordinates(image, displaced_coordinates(field), order=1, mode="nearest", prefilter=False)
