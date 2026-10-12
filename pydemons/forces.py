@@ -81,15 +81,19 @@ def demons_force(
     fixed_grad, fixed_grad_sq : ndarray
         ``gradient(fixed)`` and its squared magnitude; required for ``"passive"``.
     variant : {"passive", "active", "inverse_consistent"}
+    diffeomorphic : bool
+        If True, ``field`` is a stationary velocity field and the images are
+        compared under its exponential.
     """
+    if diffeomorphic:
+        if variant == "inverse_consistent":
+            inverse_field = exp_field(-field)
+        field = exp_field(field)
     if variant == "passive":
         return passive_force(fixed, moving, field, alpha, fixed_grad, fixed_grad_sq, scaling_factor)
     if variant == "active":
         return active_force(fixed, moving, field, alpha, scaling_factor)
     if variant == "inverse_consistent":
-        if diffeomorphic is True:
-            inverse_field = exp_field(-1 * field)
-            field = exp_field(field)
         update, loss = inverse_consistent_force(fixed, moving, field, alpha, scaling_factor)
         if inverse_field is None:
             inverse_field = -1 * field

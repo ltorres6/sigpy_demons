@@ -9,7 +9,7 @@ from tqdm.auto import tqdm
 from pydemons.backend import get_array_module
 from pydemons.convolution import FFTConvolver
 from pydemons.differences import gradient
-from pydemons.fields import compose
+from pydemons.fields import compose, exp_field
 from pydemons.filters import gaussian_kernel
 from pydemons.forces import VARIANTS, demons_force
 from pydemons.resample import zoom
@@ -48,7 +48,9 @@ class Demons:
     variant : {"passive", "active", "inverse_consistent"}
         Which demons force to use.
     diffeomorphic : bool
-        Treat the field as a stationary velocity field (log-domain demons).
+        Optimise a stationary velocity field (log-domain demons). ``run()`` still
+        returns a displacement field, its exponential; the velocity is kept in
+        ``self.velocity``.
     composition : {"A", "B"}
         Log-domain composition: ``"A"`` is ``v1 + v2``, ``"B"`` adds the Lie
         bracket term. Ignored unless ``diffeomorphic``.
@@ -171,6 +173,9 @@ class Demons:
 
             self.field = xp.stack([zoom(c, 1 / factor) for c in field]) / factor
 
+        if self.diffeomorphic:
+            self.velocity = resize(self.field, (self.ndim,) + self.original_shape)
+            self.field = exp_field(self.field)
         self.field = resize(self.field, (self.ndim,) + self.original_shape)
         self.fixed = resize(self.fixed, self.original_shape)
         self.moving = resize(self.moving, self.original_shape)

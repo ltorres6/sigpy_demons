@@ -8,7 +8,7 @@ towards positive values along axis 0.
 import numpy as np
 import pytest
 
-from conftest import blobs, interior, to_np
+from conftest import blobs, interior, smooth_field, to_np
 from pydemons import forces
 from pydemons.differences import gradient
 
@@ -81,3 +81,25 @@ def test_unknown_variant_raises():
     img = np.zeros((8, 8))
     with pytest.raises(ValueError):
         forces.demons_force(img, img, np.zeros((2, 8, 8)), 2.0, variant="nonsense")
+
+
+@pytest.mark.parametrize("variant", VARIANTS)
+def test_diffeomorphic_force_warps_by_exponential(xp, variant):
+    # In log-domain mode the field is a velocity; the force must see the displacement exp(v).
+    from pydemons.fields import exp_field
+
+    shape = (48, 48)
+    img = blobs(shape)
+    moving = np.roll(img, 2, axis=0)
+    v = xp.asarray(smooth_field(shape, amplitude=1.5, seed=13))
+    dS = gradient(xp.asarray(img))
+    common = dict(fixed_grad=dS, fixed_grad_sq=(dS**2).sum(axis=0), variant=variant)
+    a, loss_a = forces.demons_force(xp.asarray(img), xp.asarray(moving), v, 2.0, diffeomorphic=True, **common)
+    if variant == "inverse_consistent":
+        b, loss_b = forces.demons_force(
+            xp.asarray(img), xp.asarray(moving), exp_field(v), 2.0, inverse_field=exp_field(-v), **common
+        )
+    else:
+        b, loss_b = forces.demons_force(xp.asarray(img), xp.asarray(moving), exp_field(v), 2.0, **common)
+    assert np.allclose(to_np(a), to_np(b))
+    assert np.isclose(float(loss_a), float(loss_b))

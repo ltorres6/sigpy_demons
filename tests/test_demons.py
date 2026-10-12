@@ -111,3 +111,20 @@ def test_gpu_matches_cpu(variant):
     # GPU runs in single precision; hard intensity thresholds let tiny differences flip a few voxels.
     assert np.abs(f_cpu - f_gpu).mean() < 1e-3 and np.abs(f_cpu - f_gpu).max() < 0.05
     assert np.abs(w_cpu - w_gpu).mean() < 1e-3
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("variant", VARIANTS)
+def test_diffeomorphic_run_returns_displacement(variant):
+    from pydemons import warp
+    from pydemons.fields import exp_field
+
+    shape = (48, 48)
+    Is = blobs(shape)
+    Im = np.roll(Is, 2, axis=0)
+    d = Demons(Is, Im, n_levels=2, max_iter=40, diffeomorphic=True, variant=variant, progress=False)
+    warped, field = d.run()
+    # run() exponentiates on the padded domain, so only the cropped border may differ.
+    inner = (slice(None),) + interior(2, 6)
+    assert np.allclose(field[inner], exp_field(d.velocity)[inner])
+    assert np.allclose(warped, warp(d.moving, field))
