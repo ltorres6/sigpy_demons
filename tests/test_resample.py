@@ -46,7 +46,6 @@ def test_upsample_preserves_constant(xp):
     assert np.allclose(out, 3.0)
 
 
-@pytest.mark.xfail(reason="upsampling maps corners to corners, misaligned with the downsampling grid")
 @pytest.mark.parametrize("shape", [(16, 16), (8, 8, 8)])
 def test_upsample_aligns_with_downsample_grid(xp, shape):
     coarse = grid(shape).sum(axis=0)

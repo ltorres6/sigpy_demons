@@ -22,4 +22,8 @@ def zoom(arr, factor):
         filtered = xp.real(xp.fft.ifftn(spectrum))
         step = int(1 // factor)
         return filtered[(slice(None, None, step),) * arr.ndim]
-    return get_ndimage(xp).zoom(arr, factor, order=1)
+    # Fine voxel i sits at coarse coordinate i / factor, matching the downsampling grid.
+    oshape = tuple(int(round(s * factor)) for s in arr.shape)
+    axes = [xp.arange(n, dtype=xp.float64) / factor for n in oshape]
+    coords = xp.stack(xp.meshgrid(*axes, indexing="ij"))
+    return get_ndimage(xp).map_coordinates(arr, coords, order=1, mode="nearest", prefilter=False)
