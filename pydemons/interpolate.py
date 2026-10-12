@@ -26,11 +26,13 @@ def sample_linear(values, field):
     shape = field.shape[1:]
     ndim = len(shape)
     size = math.prod(shape)
-    itype = xp.int32 if size * 2 < 2**31 else xp.int64
+    # int32 indices: best on GPU, no slower overall on CPU (measured with every variant).
+    itype = xp.int32 if size < 2**31 else xp.int64
     flat = values.reshape(values.shape[0], size)
 
     # Lower corner index (flattened) and weight per axis, computed once and
-    # shared by every component and every corner.
+    # shared by every component and every corner. Weights stay in the field's
+    # dtype (floor in float, not float minus int, which would promote to float64).
     base = None
     weights, steps = [], []
     for axis, n in enumerate(shape):
@@ -39,20 +41,25 @@ def sample_linear(values, field):
         bshape[axis] = n
         coord = field[axis] + xp.arange(n, dtype=field.dtype).reshape(bshape)
         xp.clip(coord, 0, n - 1, out=coord)
-        lower = coord.astype(itype)
+        lower = xp.floor(coord)
         if n > 1:
             xp.minimum(lower, n - 2, out=lower)
         coord -= lower  # now the weight of the upper neighbour
         weights.append(coord.reshape(size))
         steps.append(stride if n > 1 else 0)
-        lower *= stride
-        base = lower if base is None else base + lower
+        index = lower.astype(itype)
+        if stride != 1:
+            index *= stride
+        if base is None:
+            base = index
+        else:
+            base += index
     base = base.reshape(size)
 
     def blend(axis, offset):
         """Interpolate over axes ``axis..ndim-1`` from the corner at ``offset``."""
         if axis == ndim:
-            # Gathering from a shifted view avoids building ``base + offset`` for every corner.
+            # Gather from a view shifted by ``offset``: no ``base + offset`` array per corner.
             return xp.take(flat[:, offset:], base, axis=1)
         lo = blend(axis + 1, offset)
         hi = blend(axis + 1, offset + steps[axis])

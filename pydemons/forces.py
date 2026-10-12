@@ -21,15 +21,18 @@ VARIANTS = ("passive", "active", "inverse_consistent")
 def _force(diff, grad, grad_sq, alpha, scaling_factor, scale=1.0):
     """``scale * diff * grad / (|grad|^2 + alpha^2 diff^2)``, zeroed where unreliable."""
     xp = get_array_module(diff, grad)
-    denominator = grad_sq + diff**2 * alpha**2
+    # Work on per-voxel arrays and broadcast over the components once at the end:
+    # fewer full passes than masking the (ndim, *shape) update.
+    denominator = diff * diff
+    denominator *= alpha**2
+    denominator += grad_sq
+    valid = xp.abs(diff) >= 1e-2**scaling_factor
+    valid &= denominator >= DENOMINATOR_THRESHOLD
     with np.errstate(divide="ignore", invalid="ignore"):
-        update = scale * (diff / denominator) * grad
-    invalid = (
-        ~xp.isfinite(update)
-        | (xp.abs(diff) < 1e-2**scaling_factor)
-        | (denominator < DENOMINATOR_THRESHOLD)
-    )
-    return xp.where(invalid, 0.0, update)
+        factor = diff / denominator
+    factor *= scale
+    valid &= xp.isfinite(factor)
+    return grad * xp.where(valid, factor, 0.0)
 
 
 def _energy(diff, field, alpha, compute_energy):
