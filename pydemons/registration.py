@@ -128,7 +128,8 @@ class Demons:
             moving = zoom(self.moving, factor)
             fixed_grad = gradient(fixed)
             fixed_grad_sq = xp.sum(fixed_grad**2, axis=0)
-            field = xp.stack([zoom(c, factor) for c in self.field])
+            # Displacements are in voxels, so they scale with the resolution.
+            field = xp.stack([zoom(c, factor) for c in self.field]) * factor
 
             if sigma_diffusion > 0.0:
                 smooth_diffusion = FFTConvolver(gaussian_kernel(sigma_diffusion, self.ndim, xp=xp), shape)
@@ -168,7 +169,7 @@ class Demons:
                     pbar.set_postfix(loss=stop)
                     pbar.update()
 
-            self.field = xp.stack([zoom(c, 1 / factor) for c in field])
+            self.field = xp.stack([zoom(c, 1 / factor) for c in field]) / factor
 
         self.field = resize(self.field, (self.ndim,) + self.original_shape)
         self.fixed = resize(self.fixed, self.original_shape)

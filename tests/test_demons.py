@@ -53,7 +53,6 @@ def test_output_shapes_and_residual_reduction(variant):
 
 
 @pytest.mark.slow
-@pytest.mark.xfail(reason="displacements are not rescaled between pyramid levels; translation is underestimated")
 @pytest.mark.parametrize("variant", VARIANTS)
 def test_recovers_translation(variant):
     shape = (64, 64)
