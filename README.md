@@ -30,6 +30,8 @@ warped, field = Demons(
     alpha=2.0,               # step-size control: |update| <= 1 / (2 * alpha)
     variant="inverse_consistent",  # or "passive", "active"
     diffeomorphic=False,     # log-domain (stationary velocity field) demons
+    tol=0.0,                 # 0 runs every iteration and skips the energy (fastest)
+    dtype="float32",         # ~2x faster on GPU; default float64
 ).run()
 ```
 
@@ -47,6 +49,24 @@ A complete example on synthetic data:
 
 ```bash
 uv run --extra plot python examples/register_synthetic.py [--gpu]
+```
+
+## Performance
+
+`benchmarks/bench_3d.py` registers a 256×256×128 volume under a smooth
+synthetic warp (3 levels, 200/100/50 iterations, `tol=0`) on an RTX 4090:
+
+| variant              | float64 | float32 |
+|----------------------|--------:|--------:|
+| `passive`            |  2.0 s  |  1.0 s  |
+| `inverse_consistent` |  3.8 s  |  2.0 s  |
+
+Mean field error is 0.13–0.14 voxels in both precisions. With `tol > 0` each
+iteration also computes the energy for the stopping rule, which costs about a
+third more per iteration.
+
+```bash
+uv run python benchmarks/bench_3d.py --gpu --dtype float32 --variant passive
 ```
 
 ## Tests
