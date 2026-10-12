@@ -64,7 +64,6 @@ def test_update_step_is_bounded(xp, variant):
     assert np.sqrt((V**2).sum(axis=0)).max() <= 1 / (2 * alpha) + 1e-9
 
 
-@pytest.mark.xfail(reason="force uses the gradient of the unwarped moving image instead of Im(x + T)")
 @pytest.mark.parametrize("update_fn", [forces.active_force, forces.inverse_consistent_force], ids=["active", "inverse_consistent"])
 def test_update_depends_on_moving_image_only_through_warp(xp, update_fn):
     # Im6 shifted by 6 and warped by T = 5 equals Im1 shifted by 1 with T = 0, so the updates must agree.

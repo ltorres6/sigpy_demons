@@ -39,18 +39,20 @@ def passive_force(fixed, moving, field, alpha, fixed_grad, fixed_grad_sq, scalin
 
 
 def active_force(fixed, moving, field, alpha, scaling_factor=1.0):
-    """Force driven by the moving-image gradient."""
+    """Force driven by the gradient of the warped moving image."""
     xp = get_array_module(fixed, moving)
-    grad = gradient(moving)
-    diff = fixed - warp(moving, field)
+    warped = warp(moving, field)
+    grad = gradient(warped)
+    diff = fixed - warped
     return _force(diff, grad, xp.sum(grad**2, axis=0), alpha, scaling_factor), energy(diff, field, alpha)
 
 
 def inverse_consistent_force(fixed, moving, field, alpha, scaling_factor=1.0):
-    """Force driven by the sum of fixed and moving gradients."""
+    """Force driven by the sum of the fixed and warped-moving gradients."""
     xp = get_array_module(fixed, moving)
-    grad = gradient(fixed) + gradient(moving)
-    diff = fixed - warp(moving, field)
+    warped = warp(moving, field)
+    grad = gradient(fixed) + gradient(warped)
+    diff = fixed - warped
     return _force(diff, grad, xp.sum(grad**2, axis=0), alpha, scaling_factor, scale=2.0), energy(diff, field, alpha)
 
 
