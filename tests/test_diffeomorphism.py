@@ -1,0 +1,170 @@
+"""Composition, exponentiation and Lie bracket of displacement fields."""
+
+import numpy as np
+import pytest
+from scipy.ndimage import map_coordinates
+
+import diffeomorphism as dm
+from conftest import grid, interior, smooth_field, to_np
+
+SHAPES = [(32, 28), (16, 14, 12)]
+
+
+def constant_field(shape, values):
+    field = np.zeros((len(shape),) + shape)
+    for i, v in zip(range(len(shape)), values):
+        field[i] = v
+    return field
+
+
+# --------------------------------------------------------------------------- compose
+
+
+@pytest.mark.parametrize("shape", SHAPES)
+def test_compose_zero_fields(xp, device, shape):
+    zero = xp.zeros((len(shape),) + shape)
+    assert np.allclose(to_np(dm.compose(zero, zero, device=device)), 0.0)
+
+
+@pytest.mark.parametrize("shape", SHAPES)
+def test_compose_with_zero_is_identity(xp, device, shape):
+    f = xp.asarray(smooth_field(shape, amplitude=2.0))
+    zero = xp.zeros_like(f)
+    inner = (slice(None),) + interior(len(shape), 3)
+    assert np.allclose(to_np(dm.compose(f, zero, device=device)), to_np(f))
+    assert np.allclose(to_np(dm.compose(zero, f, device=device))[inner], to_np(f)[inner])
+
+
+@pytest.mark.parametrize("shape", SHAPES)
+def test_compose_translations_add(xp, device, shape):
+    a = constant_field(shape, [1.5, -0.5, 0.25])
+    b = constant_field(shape, [-0.75, 2.0, 1.0])
+    out = to_np(dm.compose(xp.asarray(a), xp.asarray(b), device=device))
+    inner = (slice(None),) + interior(len(shape), 4)
+    assert np.allclose(out[inner], (a + b)[inner])
+
+
+@pytest.mark.parametrize("shape", SHAPES)
+def test_compose_samples_second_field_along_first(xp, device, shape):
+    # compose(f1, f2)(x) = f1(x) + f2(x + f1(x)), linearly interpolated.
+    f1 = smooth_field(shape, amplitude=2.0, seed=1)
+    f2 = smooth_field(shape, amplitude=2.0, seed=2)
+    coords = grid(shape) + f1
+    expected = f1 + np.stack([map_coordinates(f2[i], coords, order=1) for i in range(len(shape))])
+    out = to_np(dm.compose(xp.asarray(f1), xp.asarray(f2), device=device))
+    inner = (slice(None),) + interior(len(shape), 4)
+    assert np.allclose(out[inner], expected[inner], atol=1e-6)
+
+
+@pytest.mark.parametrize("shape", SHAPES)
+def test_compose_log_domain_first_order_is_sum(xp, device, shape):
+    f1 = smooth_field(shape, 1.0, seed=3)
+    f2 = smooth_field(shape, 1.0, seed=4)
+    out = dm.compose(xp.asarray(f1), xp.asarray(f2), diffeomorphic=True, compositionType="A", device=device)
+    assert np.allclose(to_np(out), f1 + f2)
+
+
+@pytest.mark.parametrize("shape", SHAPES)
+def test_compose_log_domain_second_order_adds_bracket(xp, device, shape):
+    f1 = xp.asarray(smooth_field(shape, 1.0, seed=5))
+    f2 = xp.asarray(smooth_field(shape, 1.0, seed=6))
+    out = dm.compose(f1, f2, diffeomorphic=True, compositionType="B", device=device)
+    expected = f1 + f2 + dm.LieBracket(f1, f2, device=device)
+    assert np.allclose(to_np(out), to_np(expected))
+
+
+@pytest.mark.xfail(reason="unknown compositionType falls through to UnboundLocalError")
+def test_compose_rejects_unknown_type():
+    f = np.zeros((2, 8, 8))
+    with pytest.raises(ValueError):
+        dm.compose(f, f, diffeomorphic=True, compositionType="C")
+
+
+# --------------------------------------------------------------------------- expfield
+
+
+@pytest.mark.parametrize("shape", SHAPES)
+def test_exp_of_zero_is_zero(xp, device, shape):
+    zero = xp.zeros((len(shape),) + shape)
+    assert np.allclose(to_np(dm.expfield(zero, device=device)), 0.0)
+
+
+@pytest.mark.parametrize("shape", SHAPES)
+def test_exp_of_large_translation_is_translation(xp, device, shape):
+    v = constant_field(shape, [2.0, -1.5, 1.0])
+    out = to_np(dm.expfield(xp.asarray(v), device=device))
+    inner = (slice(None),) + interior(len(shape), 5)
+    assert np.allclose(out[inner], v[inner])
+
+
+@pytest.mark.xfail(reason="expfield scales fields with max norm < 0.5 up instead of down (negative n)")
+@pytest.mark.parametrize("shape", SHAPES)
+def test_exp_of_small_translation_is_translation(xp, device, shape):
+    v = constant_field(shape, [0.1, -0.05, 0.02])
+    out = to_np(dm.expfield(xp.asarray(v), device=device))
+    inner = (slice(None),) + interior(len(shape), 3)
+    assert np.allclose(out[inner], v[inner])
+
+
+@pytest.mark.parametrize("amplitude", [0.3, 3.0])
+def test_exp_inverse_is_exp_of_negation(xp, device, amplitude):
+    # exp(v) composed with exp(-v) is the identity (zero displacement).
+    shape = (48, 48)
+    v = smooth_field(shape, amplitude, seed=7)
+    fwd = dm.expfield(xp.asarray(v), device=device)
+    bwd = dm.expfield(xp.asarray(-v), device=device)
+    residual = to_np(dm.compose(fwd, bwd, device=device))
+    inner = (slice(None),) + interior(2, 8)
+    assert np.abs(residual[inner]).max() < 0.05 * amplitude
+
+
+@pytest.mark.xfail(reason="expfield scales fields with max norm < 0.5 up instead of down (negative n)")
+def test_exp_of_linear_field_matches_flow(xp, device):
+    # dx/dt = a (x - c) integrates to x(1) - x(0) = (x - c)(e^a - 1).
+    shape, a = (40, 40), 0.02
+    g = grid(shape)
+    v = np.zeros((2,) + shape)
+    v[0] = a * (g[0] - 20)
+    out = to_np(dm.expfield(xp.asarray(v), device=device))
+    expected = (g[0] - 20) * np.expm1(a)
+    inner = interior(2, 4)
+    assert np.abs(out[0][inner] - expected[inner]).max() < 2e-3
+    assert np.abs(out[1][inner]).max() < 1e-6
+
+
+# --------------------------------------------------------------------------- LieBracket
+
+
+@pytest.mark.parametrize("shape", SHAPES)
+def test_bracket_of_field_with_itself_is_zero(xp, device, shape):
+    v = xp.asarray(smooth_field(shape, 1.0, seed=8))
+    assert np.allclose(to_np(dm.LieBracket(v, v, device=device)), 0.0)
+
+
+@pytest.mark.parametrize("shape", SHAPES)
+def test_bracket_is_antisymmetric(xp, device, shape):
+    u = xp.asarray(smooth_field(shape, 1.0, seed=9))
+    v = xp.asarray(smooth_field(shape, 1.0, seed=10))
+    assert np.allclose(to_np(dm.LieBracket(u, v, device=device)), -to_np(dm.LieBracket(v, u, device=device)))
+
+
+@pytest.mark.parametrize("shape", SHAPES)
+def test_bracket_of_translations_is_zero(xp, device, shape):
+    u = xp.asarray(constant_field(shape, [1.0, 2.0, 3.0]))
+    v = xp.asarray(constant_field(shape, [-1.0, 0.5, 2.0]))
+    assert np.allclose(to_np(dm.LieBracket(u, v, device=device)), 0.0)
+
+
+@pytest.mark.xfail(reason="LieBracket contracts with the transposed Jacobian and the gradient is 2x")
+@pytest.mark.parametrize("shape", SHAPES)
+def test_bracket_matches_analytic(xp, device, shape):
+    # LieBracket(u, v) = 0.5 * (Jv u - Ju v). With u = e_0 constant and v_1 = x_0, Jv u = e_1.
+    ndim = len(shape)
+    u = constant_field(shape, [1.0])
+    v = np.zeros((ndim,) + shape)
+    v[1] = grid(shape)[0]
+    out = to_np(dm.LieBracket(xp.asarray(u), xp.asarray(v), device=device))
+    expected = np.zeros_like(out)
+    expected[1] = 0.5
+    inner = (slice(None),) + interior(ndim, 1)
+    assert np.allclose(out[inner], expected[inner])

@@ -6,3 +6,5 @@ testoaconvolve1d.py
 testResize.py
 toeplitzConvolve.py
 testCircshift.py
+.venv/
+.pytest_cache/
