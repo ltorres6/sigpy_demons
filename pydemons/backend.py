@@ -13,13 +13,10 @@ Example
 
 from __future__ import annotations
 
-import warnings
 from types import ModuleType
 from typing import Any
 
 import numpy as np
-import scipy.ndimage
-import scipy.signal
 
 _cupy: ModuleType | None = None
 _cupy_checked = False
@@ -56,27 +53,6 @@ def get_array_module(*arrays: Any) -> ModuleType:
         if hasattr(arr, "__cuda_array_interface__"):
             return _get_cupy()
     return np
-
-
-def get_ndimage(xp: ModuleType) -> ModuleType:
-    """Return the ``scipy.ndimage`` implementation matching ``xp``."""
-    if xp is np:
-        return scipy.ndimage
-    import cupyx.scipy.ndimage
-
-    return cupyx.scipy.ndimage
-
-
-def get_signal(xp: ModuleType) -> ModuleType:
-    """Return the ``scipy.signal`` implementation matching ``xp``."""
-    if xp is np:
-        return scipy.signal
-    with warnings.catch_warnings():
-        # cupyx.scipy.signal imports an experimental JIT module that warns on import.
-        warnings.simplefilter("ignore", FutureWarning)
-        import cupyx.scipy.signal
-
-    return cupyx.scipy.signal
 
 
 def to_gpu(arr: Any) -> Any:

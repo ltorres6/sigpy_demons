@@ -12,12 +12,18 @@ def _along(axis, ndim, s):
     return tuple(idx)
 
 
-def gradient(arr):
+def gradient(arr, rows=None):
     """Central-difference gradient of ``arr``.
 
     Returns an array of shape ``(arr.ndim, *arr.shape)``; boundaries wrap.
+    With ``rows`` (a slice of the first axis) only those rows are computed,
+    from a copy of them plus one wrapped neighbour row on each side.
     """
     xp = get_array_module(arr)
+    if rows is not None:
+        start, stop, _ = rows.indices(arr.shape[0])
+        window = xp.take(arr, xp.arange(start - 1, stop + 1) % arr.shape[0], axis=0)
+        return gradient(window)[:, 1:-1]
     out = xp.empty((arr.ndim,) + arr.shape, dtype=xp.result_type(arr.dtype, xp.float32))
     for i in range(arr.ndim):
         o = out[i]

@@ -10,7 +10,8 @@ import math
 
 import numpy as np
 
-from pydemons.backend import get_array_module, get_ndimage
+from pydemons.backend import get_array_module
+from pydemons.separable import correlate_along
 
 
 def gaussian_kernel_1d(sigma=1.0, xp=np):
@@ -29,20 +30,35 @@ def gaussian_kernel(sigma=1.0, ndim=1, xp=np):
     return kernel / kernel.sum()
 
 
-def gaussian_smooth(arr, sigma, axes=None):
-    """Separable Gaussian smoothing with zero padding (``mode="constant"``).
+def gaussian_smooth(arr, sigma, axes=None, mode="constant", out=None):
+    """Separable Gaussian smoothing.
 
-    Identical to convolving with ``gaussian_kernel(sigma, ndim)`` but costs
-    one 1D pass per axis. ``axes`` defaults to all axes; pass e.g.
-    ``(1, 2, 3)`` to smooth every component of a 3D field in one call.
+    Identical to convolving with ``gaussian_kernel(sigma, ndim)``, applied as
+    one banded matrix multiply per axis. ``axes`` defaults to all axes; pass
+    e.g. ``(1, 2, 3)`` to smooth every component of a 3D field in one call.
+    ``mode`` is ``"constant"`` (zero padding) or ``"reflect"`` (half-sample
+    symmetric). ``out`` receives the result and may be ``arr`` itself.
+
+    Leading axes that are not smoothed (such as a field's component axis) are
+    processed one entry at a time, so temporaries are the size of one entry.
     """
     xp = get_array_module(arr)
-    ndi = get_ndimage(xp)
-    k1d = gaussian_kernel_1d(sigma, xp=xp)
+    axes = tuple(range(arr.ndim)) if axes is None else tuple(axes)
+    if axes and 0 not in axes:
+        out = xp.empty_like(arr) if out is None else out
+        inner = tuple(a - 1 for a in axes)
+        for i in range(arr.shape[0]):
+            # Each entry only reads itself, so writing it back in place is safe.
+            out[i] = gaussian_smooth(arr[i], sigma, inner, mode)
+        return out
+    k1d = gaussian_kernel_1d(sigma)
     k1d = k1d / k1d.sum()
-    for axis in range(arr.ndim) if axes is None else axes:
-        arr = ndi.correlate1d(arr, k1d, axis=axis, mode="constant", cval=0.0)
-    return arr
+    for axis in axes:
+        arr = correlate_along(arr, k1d, axis, mode)
+    if out is None:
+        return arr
+    out[...] = arr
+    return out
 
 
 def normalized_frequencies(n, xp=np):
@@ -92,7 +108,7 @@ def extended_box_gaussian(arr, sigma, passes=4):
 
     Cost is independent of ``sigma``. The impulse response has variance exactly
     ``sigma**2``, and more passes give a closer match to a true Gaussian.
-    Boundaries are half-sample symmetric (``scipy.ndimage`` mode ``"reflect"``).
+    Boundaries are half-sample symmetric (``d c b a | a b c d``).
 
     References
     ----------
@@ -115,5 +131,5 @@ def extended_box_gaussian(arr, sigma, passes=4):
 
 def unsharp_mask(arr, sigma=1.0, amount=1.0):
     """Sharpen by adding back ``amount`` times the detail removed by a Gaussian blur."""
-    blurred = get_ndimage(get_array_module(arr)).gaussian_filter(arr, sigma, mode="reflect")
+    blurred = gaussian_smooth(arr, sigma, mode="reflect")
     return arr + amount * (arr - blurred)

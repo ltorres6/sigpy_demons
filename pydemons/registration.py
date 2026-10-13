@@ -7,7 +7,6 @@ import logging
 from tqdm.auto import tqdm
 
 from pydemons.backend import get_array_module
-from pydemons.differences import gradient
 from pydemons.fields import compose, exp_field
 from pydemons.filters import gaussian_smooth
 from pydemons.forces import VARIANTS, demons_force
@@ -130,10 +129,14 @@ class Demons:
             shape = self.level_shapes[level]
             fixed = zoom(self.fixed, factor)
             moving = zoom(self.moving, factor)
-            fixed_grad = gradient(fixed)
-            fixed_grad_sq = xp.sum(fixed_grad**2, axis=0)
             # Displacements are in voxels, so they scale with the resolution.
-            field = xp.stack([zoom(c, factor) for c in self.field]) * factor
+            if level == 0:
+                field = xp.zeros((self.ndim,) + shape, dtype=self.dtype)  # nothing to downsample yet
+            else:
+                field = xp.stack([zoom(c, factor) for c in self.field]) * factor
+            self.field = None  # the full-resolution copy is not needed until the level ends
+
+            update = xp.empty_like(field)  # reused by every iteration of this level
 
             losses = []
             window = 4 * (self.n_levels - level)
@@ -146,16 +149,15 @@ class Demons:
                         moving,
                         field,
                         self.alpha,
-                        fixed_grad=fixed_grad,
-                        fixed_grad_sq=fixed_grad_sq,
                         variant=self.variant,
                         scaling_factor=self.n_levels - level,
                         diffeomorphic=self.diffeomorphic,
                         compute_energy=self.tol > 0,
+                        out=update,
                     )
                     if self.fluid_sigma > 0.0:
-                        update = gaussian_smooth(update, self.fluid_sigma, axes=spatial_axes)
-                    field = compose(field, update, diffeomorphic=self.diffeomorphic, composition=self.composition)
+                        gaussian_smooth(update, self.fluid_sigma, axes=spatial_axes, out=update)
+                    compose(field, update, diffeomorphic=self.diffeomorphic, composition=self.composition, out=field)
 
                     # The energy is only computed (and the GPU only synchronised) when tol > 0.
                     if loss is not None:
@@ -167,12 +169,14 @@ class Demons:
                                 break
 
                     if self.diffusion_sigma > 0.0:
-                        field = gaussian_smooth(field, self.diffusion_sigma, axes=spatial_axes)
+                        gaussian_smooth(field, self.diffusion_sigma, axes=spatial_axes, out=field)
                     if loss is not None:
                         pbar.set_postfix(rel_change=stop)
                     pbar.update()
 
+            del fixed, moving, update
             self.field = xp.stack([zoom(c, 1 / factor) for c in field]) / factor
+            del field
 
         if self.diffeomorphic:
             self.velocity = resize(self.field, (self.ndim,) + self.original_shape)

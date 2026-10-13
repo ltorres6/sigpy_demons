@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import functools
 import math
 
-from pydemons.backend import get_array_module, get_ndimage, get_signal
-from pydemons.filters import butterworth
+from pydemons.backend import get_array_module
+from pydemons.separable import correlate_along, linear_resample_matrix, matmul_along
 
 # Burt & Adelson's 5-tap binomial smoothing kernel (sigma ~ 1).
 _BINOMIAL = (1 / 16, 4 / 16, 6 / 16, 4 / 16, 1 / 16)
@@ -23,15 +24,37 @@ def zoom(arr, factor):
     if factor == 1:
         return arr
     if factor < 1:
-        h = butterworth(0.5 * factor, arr.shape, order=2, xp=xp).astype(arr.dtype)
-        arr = xp.real(xp.fft.ifftn(xp.fft.fftn(arr) * xp.fft.ifftshift(h * h)))
+        arr = _lowpass(arr, 0.5 * factor, order=2)
         step = 1 / factor
         if math.isclose(step, round(step)):
-            return arr[(slice(None, None, round(step)),) * arr.ndim]
-    oshape = tuple(int(round(s * factor)) for s in arr.shape)
-    axes = [xp.arange(n, dtype=xp.float64) / factor for n in oshape]
-    coords = xp.stack(xp.meshgrid(*axes, indexing="ij"))
-    return get_ndimage(xp).map_coordinates(arr, coords, order=1, mode="nearest", prefilter=False)
+            return xp.ascontiguousarray(arr[(slice(None, None, round(step)),) * arr.ndim])
+    # Linear interpolation on a regular grid is separable: one small matrix per axis.
+    for axis, n in enumerate(arr.shape):
+        resample = linear_resample_matrix(xp, n, int(round(n * factor)), factor, arr.dtype)
+        arr = matmul_along(arr, resample, axis)
+    return arr
+
+
+def _lowpass(arr, cutoff, order):
+    """Apply a squared radial Butterworth filter (see :func:`pydemons.filters.butterworth`).
+
+    The gain depends only on |frequency|, so real FFTs give the same result as
+    complex ones at half the cost.
+    """
+    xp = get_array_module(arr)
+    axes = tuple(range(arr.ndim))
+    spectrum = xp.fft.rfftn(arr, axes=axes)
+    spectrum *= _squared_butterworth_rfft(xp, arr.shape, cutoff, order, arr.dtype.str)
+    return xp.fft.irfftn(spectrum, s=arr.shape, axes=axes)
+
+
+@functools.lru_cache(maxsize=4)
+def _squared_butterworth_rfft(xp, shape, cutoff, order, dtype):
+    """Squared Butterworth gain on the ``rfftn`` frequency grid (cached: the pyramid reuses it)."""
+    freqs = [xp.fft.fftfreq(n) for n in shape[:-1]] + [xp.fft.rfftfreq(shape[-1])]
+    grids = xp.meshgrid(*freqs, indexing="ij", sparse=True)
+    h = 1 / (1 + (sum(g**2 for g in grids) / cutoff**2) ** order)
+    return (h * h).astype(dtype)
 
 
 def fft_upsample(arr, factor):
@@ -40,19 +63,30 @@ def fft_upsample(arr, factor):
     Exact for periodic signals with no energy at or above the input Nyquist
     frequency.
     """
-    signal = get_signal(get_array_module(arr))
+    xp = get_array_module(arr)
     for axis, n in enumerate(arr.shape):
-        arr = signal.resample(arr, n * factor, axis=axis)
+        m = n * factor
+        spectrum = xp.fft.rfft(arr, axis=axis)
+        shape = list(spectrum.shape)
+        shape[axis] = m // 2 + 1
+        padded = xp.zeros(shape, dtype=spectrum.dtype)
+        keep = [slice(None)] * arr.ndim
+        keep[axis] = slice(0, n // 2 + 1)
+        padded[tuple(keep)] = spectrum[tuple(keep)]
+        if n % 2 == 0:
+            # The input Nyquist term stands for +n/2 and -n/2; split it between them.
+            nyquist = [slice(None)] * arr.ndim
+            nyquist[axis] = n // 2
+            padded[tuple(nyquist)] *= 0.5
+        arr = xp.fft.irfft(padded, n=m, axis=axis) * (m / n)
     return arr
 
 
 def _smooth(arr, gain=1.0):
     """Separable binomial smoothing with half-sample symmetric boundaries."""
-    xp = get_array_module(arr)
-    ndi = get_ndimage(xp)
-    kernel = xp.asarray(_BINOMIAL) * gain
+    kernel = [k * gain for k in _BINOMIAL]
     for axis in range(arr.ndim):
-        arr = ndi.correlate1d(arr, kernel, axis=axis, mode="reflect")
+        arr = correlate_along(arr, kernel, axis, "reflect")
     return arr
 
 
