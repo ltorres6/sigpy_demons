@@ -1,0 +1,65 @@
+import numpy as np
+import pytest
+
+from conftest import grid, interior, to_np
+from pydemons.differences import gradient
+
+
+@pytest.mark.parametrize("shape", [(24, 20), (12, 10, 8)])
+def test_gradient_shape(xp, shape):
+    out = gradient(xp.zeros(shape))
+    assert out.shape == (len(shape),) + shape
+
+
+@pytest.mark.parametrize("shape", [(24, 20), (12, 10, 8)])
+def test_gradient_of_constant_is_zero(xp, shape):
+    assert np.allclose(to_np(gradient(xp.full(shape, 3.5))), 0.0)
+
+
+@pytest.mark.parametrize("shape", [(24, 20), (12, 10, 8)])
+def test_gradient_of_ramp_equals_slope(xp, shape):
+    slopes = [0.5, -2.0, 1.25][: len(shape)]
+    g = grid(shape)
+    ramp = sum(s * g[i] for i, s in enumerate(slopes))
+    out = to_np(gradient(xp.asarray(ramp)))
+    for i, s in enumerate(slopes):
+        assert np.allclose(out[i][interior(len(shape), 1)], s)
+
+
+def test_gradient_is_periodic_central_difference(xp):
+    # Boundaries wrap, so a periodic sinusoid has an exact closed-form central difference everywhere.
+    n, k = 32, 3
+    x = np.arange(n, dtype=np.float64)
+    w = 2 * np.pi * k / n
+    signal = np.tile(np.sin(w * x)[:, None], (1, 4))
+    out = to_np(gradient(xp.asarray(signal)))
+    expected = np.sin(w) * np.cos(w * x)
+    assert np.allclose(out[0][:, 0], expected)
+    assert np.allclose(out[1], 0.0)
+
+
+@pytest.mark.parametrize("shape", [(24, 20), (12, 10, 8)])
+def test_laplacian_of_quadratic(xp, shape):
+    from pydemons.differences import laplacian
+
+    g = grid(shape)
+    out = to_np(laplacian(xp.asarray(sum(g[i] ** 2 for i in range(len(shape))))))
+    assert out.shape == shape
+    assert np.allclose(out[interior(len(shape), 1)], 2.0 * len(shape))
+
+
+def test_laplacian_is_periodic_second_difference(xp):
+    from pydemons.differences import laplacian
+
+    n, k = 32, 3
+    x = np.arange(n, dtype=np.float64)
+    w = 2 * np.pi * k / n
+    out = to_np(laplacian(xp.asarray(np.sin(w * x))))
+    assert np.allclose(out, (2 * np.cos(w) - 2) * np.sin(w * x))
+
+
+@pytest.mark.parametrize("shape", [(1, 5), (2, 7), (3, 4, 2), (9, 1, 6)])
+def test_gradient_matches_periodic_definition_on_short_axes(xp, shape):
+    arr = np.random.default_rng(0).random(shape)
+    expected = np.stack([(np.roll(arr, -1, axis=i) - np.roll(arr, 1, axis=i)) / 2 for i in range(arr.ndim)])
+    assert np.allclose(to_np(gradient(xp.asarray(arr))), expected)
